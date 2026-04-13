@@ -1,0 +1,12 @@
+name = "Novikov"
+uuid = "3134094c-a3e1-4cf0-a7ae-6c43f0bcb42c"
+version = "0.1.0"
+authors = ["Toby Hammond <tobiasjhammond@gmail.com>"]
+
+[deps]
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[compat]
+FFTW = "1.10.0"
+LinearAlgebra = "1.12.0"
