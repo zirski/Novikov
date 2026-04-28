@@ -7,40 +7,57 @@
 
 module Novikov
 
-export gen_kvec, integrate
-
 include("utils.jl")
+
+export gen_kvec, evolve, dscrt
 
 using FFTW, LinearAlgebra
 
-# Generates vector of complex values to be applied during derivative calculations. 
-gen_kvec(L, N) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
-
-function integrate(u, t_f, q, kvec, N)
+function evolve(
+    u::Vector{Float64},
+    t_f::Float64,
+    q::Int64,
+    kvec::Vector{ComplexF64},
+    N::Int64
+)
+    Ndiv2 = div(N, 2)
     uhat_buf = Vector{ComplexF64}(undef, Ndiv2 + 1)
-    uhat = Vector{ComplexF64}(undef, Ndiv2 + 1)
+    u_func = similar(u)
     plan = plan_rfft(u)
     iplan = plan_irfft(uhat_buf, N)
+    uhat_out = plan * u
 
     # rk4 preallocations
-    ks = zeros(Float64, N, 4)
+    ks = zeros(ComplexF64, Ndiv2 + 1, 4)
     u_tmp = similar(uhat_buf)
+    kvsquared = kvec .^ 2
 
     # scratch buffer for u derivatives: [u_x, u_xx, u_xxx]
-    dus = zeros(ComplexF64, N, 3)
+    dus = zeros(Float64, N, 3)
 
-    # rate of change function (1/(1+k^2) * g)
-    function f!(u_output, u, u_x, u_xx, u_xxx)
-        deriv!(u, u_x, 1, uhat_buf, kvec, plan, iplan)
+    # rate of change function (1/(1+k^2) * ghat)
+    # We need to perform the derivatives in function space to compute g
+    # accurately, which sucks for time efficiency but here we are
+    function f!(
+        u::Vector{Float64},
+        u_output::AbstractArray{ComplexF64,1},
+        u_x::AbstractArray{Float64,1},
+        u_xx::AbstractArray{Float64,1},
+        u_xxx::AbstractArray{Float64,1},
+        plan,
+        iplan
+    )
+        deriv!(u, u_x, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xx, 2, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xxx, 3, uhat_buf, kvec, plan, iplan)
 
-        #todo: make sure g(u) is in frequency space before multiplying by 1 / (1 + k^2)
-        @. u_output = 1 / (1 + kvec^2) * (-u^2 * (4 * u_x - u_xxx) + 3 * u * u_x * u_xx)
+        u_output .= (plan * (-u .^ 2 .* (4 .* u_x - u_xxx) .+ 3 .* u .* u_x .* u_xx)) ./ (1 .- kvsquared)
+        return nothing
     end
-    rk4!(f!, uhat, u_tmp, dus, t_f, q, ks)
-    mul!(u, iplan, uhat)
-    return u
+
+    rk4!(f!, uhat_out, u_func, u_tmp, dus, t_f, q, ks, plan, iplan)
+    mul!(u_func, iplan, uhat_out)
+    return u_func
 end
 
 end # module Novikov
