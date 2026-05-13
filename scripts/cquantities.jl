@@ -1,8 +1,8 @@
 using Novikov, Revise, Elliptic, Elliptic.Jacobi, Random, FFTW, Plots, Printf
 
-trig(x, a, b) = a * cos(b * pi * x) + a
-jacobi(x, a, b, m) = a * (cn(b * x, m))^2
-peak(x, c) = sqrt(c) * exp(-abs(x - 50))
+trig(x, a, b) = a * cos(b * pi * x) + a + 0.9
+jacobi(x, a, b, m) = a * (cn(b * x, m))^2 + 0.9
+peak(x, c) = sqrt(c) * exp(-abs(x - 50)) + 0.2
 
 num_tests = 10
 N = 1024 * 4
