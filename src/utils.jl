@@ -92,7 +92,7 @@ function rk4!(
     for _ = 1:q
         mul!(u, iplan, uhat)
         # f! preserves the state of uhat while computing the derivative to be 
-        # stored in ks. Necessary because we need an untainted uhat for line 87.
+        # stored in ks. Necessary because we need an untainted uhat for line 112.
         # This also necessitates u_tmp.
         @views f!(u, ks[:, 1], dus[:, 1], dus[:, 2], dus[:, 3], plan, iplan)
 
