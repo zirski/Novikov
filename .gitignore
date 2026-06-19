@@ -28,4 +28,6 @@ LocalPreferences.toml
 JuliaLocalPreferences.toml
 docs/
 notes/
+ext_scripts/
+scripts/tw_sols_test.jl
 .DS_Store
