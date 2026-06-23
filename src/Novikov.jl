@@ -1,15 +1,9 @@
-# todo list:
-# 1. make sure solver works (no mistakes)
-# 2. test for conserved quantities (look at red notebook)
-# 3. write code for traveling-wave IC generation (Novikov paper.pdf)
-# 4. put random trig functions into Kdv to see what happens
-
-
 module Novikov
 
 include("utils.jl")
+include("tw.jl")
 
-export gen_kvec, evolve, dscrt, integrate, deriv!, deriv
+export gen_kvec, evolve, dscrt, integrate, deriv!, deriv, gen_jacobian
 
 using FFTW, LinearAlgebra
 

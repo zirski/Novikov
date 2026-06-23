@@ -1,15 +1,13 @@
 using LinearAlgebra
 
-export gen_jacobian
-
 function beta(j, l, L)
     lam = 2 * pi / L
-    return i * lam * (4 + (lam * l)^2) - 3 * lam * (j - l)(lam * l)^3
+    return im * lam * (4 + (lam * l)^2) - 3 * lam * (j - l) * (lam * l)^3
 end
 
 function alpha(c, n, L)
     lam = 2 * pi / L
-    return -c * (im * lam * n + (lam * k)^3)
+    return -c * (im * lam * n + (lam * n)^3)
 end
 
 function gen_combo_indices(k, n)
@@ -33,13 +31,23 @@ function gen_combo_indices(k, n)
     )
 end
 
+function get_fhat(fhat::Vector, i::Integer)
+    if i == 0
+        return 0
+    elseif i < 0
+        return fhat[-i]
+    else
+        return fhat[i]
+    end
+end
+
 function gen_jacobian(fhat::Vector{ComplexF64}, c, L::Float64, N::Integer)
     jac = zeros(ComplexF64, N, N)
     term::ComplexF64 = zero(ComplexF64)
     # main diagonal terms, where k = n = d
     for d in 1:N
         # 3-combinations and alpha term
-        term += alpha(c, d, L) + 3 * (beta(0, d, L) + beta(2d, d, L) + beta(0, -d, L)) * fhat(d) ^ 2
+        term += alpha(c, d, L) + 3 * (beta(0, d, L) + beta(2d, d, L) + beta(0, -d, L)) * fhat[d] ^ 2
         combo_indices = ((0, d), (2d, d), (0, -d))
         # line segments:
         # We add terms for each j "row", checking if the l-indices are in-bounds for each line.
@@ -52,33 +60,33 @@ function gen_jacobian(fhat::Vector{ComplexF64}, c, L::Float64, N::Integer)
             # d1: l = j - n; d2: l = j + n
             # beta * fhat(k - j) * fhat(l)
             if l_bounds[1] <= j - d <= l_bounds[2] && !((j, j - d) in combo_indices)
-                term += beta(j, j - d, L) * fhat(d - j) * fhat(j - d)
+                term += beta(j, j - d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j-d)
             end
             if l_bounds[1] <= j + d <= l_bounds[2] && !((j, j + d) in combo_indices)
-                term += beta(j, j + d, L) * fhat(d - j) * fhat(j + d)
+                term += beta(j, j + d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j+d)
             end
 
             # v1, v2: l = n, so positions are invariant of j
             # beta * fhat(k - j) * fhat(j - l)
             if l_bounds[1] <= d <= l_bounds[2] && !((j, d) in combo_indices)
-                term += beta(j, d, L) * fhat(d - j) * fhat(j - d)
+                term += beta(j, d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j-d)
             end
             if l_bounds[1] <= -d <= l_bounds[2] && !((j, -d) in combo_indices)
-                term += beta(j, -d, L) * fhat(d - j) * fhat(j + d)
+                term += beta(j, -d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j+d)
             end
 
             # h1, h2: we can simplify the condition j = k - n, j = k + n since k = n
             if j == 0
                 for l in l_bounds
                     if !((j, l) in combo_indices)
-                        term += beta(j, l, L) * fhat(-l) * fhat(l)
+                        term += beta(j, l, L) * get_fhat(fhat, l) * get_fhat(fhat, l)
                     end
                 end
             end
             if j == 2d
                 for l in l_bounds
                     if !((j, l) in combo_indices)
-                        term += beta(j, l, L) * fhat(j - l) * fhat(l)
+                        term += beta(j, l, L) * get_fhat(fhat, j-l) * get_fhat(fhat, l)
                     end
                 end
             end
@@ -96,20 +104,20 @@ function gen_jacobian(fhat::Vector{ComplexF64}, c, L::Float64, N::Integer)
 
                 if k == 3n
                     # a1
-                    term += 3 * beta(2n, n, L) * fhat(n) ^ 2
+                    term += 3 * beta(2n, n, L) * fhat[n] ^ 2
                     # 2 - combinations
                     for combo in combo_indices
                         j = combo[1]
                         l = combo[2]
-                        term_tmp = 2 * beta(j, l, L) * fhat(n)
+                        term_tmp = 2 * beta(j, l, L) * fhat[n]
                         if combo != (2n, n) && j_bounds[1] <= j <= j_bounds[2]
                             if max(-N, -N + j) <= l <= min(N, N + j)
                                 if combo[3] == 1
-                                    term_tmp *= fhat(l)
+                                    term_tmp *= get_fhat(fhat, l)
                                 elseif combo[3] == 2
-                                    term_tmp *= fhat(k - j)
+                                    term_tmp *= get_fhat(fhat, k-j)
                                 else
-                                    term_tmp *= fhat(j - l)
+                                    term_tmp *= get_fhat(fhat, j-l)
                                 end
                             end
                         end
@@ -119,15 +127,15 @@ function gen_jacobian(fhat::Vector{ComplexF64}, c, L::Float64, N::Integer)
                     for combo in combo_indices
                         j = combo[1]
                         l = combo[2]
-                        term_tmp = 2 * beta(j, l, L) * fhat(n)
+                        term_tmp = 2 * beta(j, l, L) * fhat[n]
                         if j_bounds[1] <= j <= j_bounds[2]
                             if max(-N, -N + j) <= l <= min(N, N + j)
                                 if combo[3] == 1
-                                    term_tmp *= fhat(l)
+                                    term_tmp *= get_fhat(fhat, l)
                                 elseif combo[3] == 2
-                                    term_tmp *= fhat(k - j)
+                                    term_tmp *= get_fhat(fhat, k-j)
                                 else
-                                    term_tmp *= fhat(j - l)
+                                    term_tmp *= get_fhat(fhat, j-l)
                                 end
                             end
                         end
@@ -143,32 +151,32 @@ function gen_jacobian(fhat::Vector{ComplexF64}, c, L::Float64, N::Integer)
 
                     # d1: l = j - n; d2: l = j + n
                     if l_bounds[1] <= j - n <= l_bounds[2] && !((j, j - n) in combo_indices)
-                        term += beta(j, j - n, L) * fhat(k - j) * fhat(j - n)
+                        term += beta(j, j - n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j-n)
                     end
                     if l_bounds[1] <= j + n <= l_bounds[2] && !((j, j + n) in combo_indices)
-                        term += beta(j, j + n, L) * fhat(k - j) * fhat(j + n)
+                        term += beta(j, j + n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j+n)
                     end
 
                     # v1, v2; l = +- n
                     if l_bounds[1] <= n <= l_bounds[2] && !((j, n) in combo_indices)
-                        term += beta(j, n, L) * fhat(k - j) * fhat(j - n)
+                        term += beta(j, n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j-n)
                     end
                     if l_bounds[1] <= -n <= l_bounds[2] && !((j, -n) in combo_indices)
-                        term += beta(j, -n, L) * fhat(k - j) * fhat(j + n)
+                        term += beta(j, -n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j+n)
                     end
 
                     # h1, h2; k - j = n
                     if j == k - n
                         for l in l_bounds
                             if !((j, l) in combo_indices)
-                                term += beta(j, l, L) * fhat(j - l) * fhat(l)
+                                term += beta(j, l, L) * get_fhat(fhat, j-l) * get_fhat(fhat, l)
                             end
                         end
                     end
                     if j == k + n
                         for l in l_bounds
                             if !((j, l) in combo_indices)
-                                term += beta(j, l, L) * fhat(j - l) * fhat(l)
+                                term += beta(j, l, L) * get_fhat(fhat, j-l) * get_fhat(fhat, l)
                             end
                         end
                     end
@@ -177,6 +185,8 @@ function gen_jacobian(fhat::Vector{ComplexF64}, c, L::Float64, N::Integer)
             end
         end
     end
+
+    return jac
 end
 
 function gen_tw_sol(c::Float64, guess::Vector{ComplexF64})
