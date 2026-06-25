@@ -45,7 +45,7 @@ function evolve(
         deriv!(u, u_xx, 2, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xxx, 3, uhat_buf, kvec, plan, iplan)
 
-        u_output .= (plan * (-u .^ 2 .* (4 .* u_x - u_xxx) .+ 3 .* u .* u_x .* u_xx)) ./ (1 .- kvsquared)
+        @. u_output = $*(plan, (-u ^ 2 * (4 * u_x - u_xxx) + 3 * u * u_x * u_xx)) / (1 - kvsquared)
         return nothing
     end
 

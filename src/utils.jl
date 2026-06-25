@@ -11,7 +11,7 @@ gen_kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
 function deriv!(
     u::AbstractArray{Float64,1},
     du::AbstractArray{Float64,1},
-    p::Int,
+    p::Unsigned,
     uhat::AbstractArray{ComplexF64,1},
     kvec::AbstractArray{ComplexF64,1},
     plan,
@@ -53,7 +53,7 @@ end
 function deriv(
     u::AbstractArray{Float64,1},
     uhat::AbstractArray{ComplexF64,1},
-    p::Int,
+    p::Unsigned,
     kvec::AbstractArray{ComplexF64,1},
     plan,
     iplan
@@ -75,10 +75,10 @@ end
 #           array size).
 function rk4!(
     f!::Function,
-    uhat::Vector{ComplexF64},
-    u::Vector{Float64},
-    u_tmp::Vector{ComplexF64},
-    dus::Array{Float64,2},
+    uhat::AbstractArray{ComplexF64,1},
+    u::AbstractArray{Float64,1},
+    u_tmp::AbstractArray{ComplexF64,1},
+    dus::AbstractArray{Float64,2},
     t,
     q,
     ks,
@@ -116,12 +116,12 @@ function rk4!(
 end
 
 function dscrt(f, a, L, N)
-    xvec = collect(0:N-1) * (L / N) .+ a
+    xvec = collect(0:(N-1)) * (L / N) .+ a
     return (x=xvec, y=f.(xvec))
 end
 
 function dscrt(f, L, N)
-    xvec = collect(0:N-1) * (L / N)
+    xvec = collect(0:(N-1)) * (L / N)
     return (x=xvec, y=f.(xvec))
 end
 
