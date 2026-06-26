@@ -11,7 +11,7 @@ gen_kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
 function deriv!(
     u::AbstractArray{Float64,1},
     du::AbstractArray{Float64,1},
-    p::Unsigned,
+    p::Integer,
     uhat::AbstractArray{ComplexF64,1},
     kvec::AbstractArray{ComplexF64,1},
     plan,
@@ -53,7 +53,7 @@ end
 function deriv(
     u::AbstractArray{Float64,1},
     uhat::AbstractArray{ComplexF64,1},
-    p::Unsigned,
+    p::Integer,
     kvec::AbstractArray{ComplexF64,1},
     plan,
     iplan
@@ -67,8 +67,8 @@ end
 # Mutates input vector u in-place; 0 allocations
 # f:        Vector-valued vectorized function
 # uhat:     Complex input vector to be integrated
-# u_func:   scratch buffer for real-valued u
-# u_tmp:    generic complex scratch buffer
+# u:        scratch buffer for real-valued u
+# uhat_tmp: generic complex scratch buffer
 # dus:      scratch buffer for u derivs
 # ks:       2d array of scratch buffers
 # q:        number of iterations. Not named n to avoid confusion with N (global 
@@ -77,7 +77,7 @@ function rk4!(
     f!::Function,
     uhat::AbstractArray{ComplexF64,1},
     u::AbstractArray{Float64,1},
-    u_tmp::AbstractArray{ComplexF64,1},
+    uhat_tmp::AbstractArray{ComplexF64,1},
     dus::AbstractArray{Float64,2},
     t,
     q,
@@ -93,19 +93,19 @@ function rk4!(
         mul!(u, iplan, uhat)
         # f! preserves the state of uhat while computing the derivative to be 
         # stored in ks. Necessary because we need an untainted uhat for line 112.
-        # This also necessitates u_tmp.
+        # This also necessitates uhat_tmp.
         @views f!(u, ks[:, 1], dus[:, 1], dus[:, 2], dus[:, 3], plan, iplan)
 
-        @views @. u_tmp = dtd2 * ks[:, 1] + uhat
-        mul!(u, iplan, u_tmp)
+        @views @. uhat_tmp = dtd2 * ks[:, 1] + uhat
+        mul!(u, iplan, uhat_tmp)
         @views f!(u, ks[:, 2], dus[:, 1], dus[:, 2], dus[:, 3], plan, iplan)
 
-        @views @. u_tmp = dtd2 * ks[:, 2] + uhat
-        mul!(u, iplan, u_tmp)
+        @views @. uhat_tmp = dtd2 * ks[:, 2] + uhat
+        mul!(u, iplan, uhat_tmp)
         @views f!(u, ks[:, 3], dus[:, 1], dus[:, 2], dus[:, 3], plan, iplan)
 
-        @views @. u_tmp = dt * ks[:, 3] + uhat
-        mul!(u, iplan, u_tmp)
+        @views @. uhat_tmp = dt * ks[:, 3] + uhat
+        mul!(u, iplan, uhat_tmp)
         @views f!(u, ks[:, 4], dus[:, 1], dus[:, 2], dus[:, 3], plan, iplan)
 
         # update step.

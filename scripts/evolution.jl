@@ -1,4 +1,4 @@
-using Revise, Novikov, FFTW, Plots
+using Revise, Novikov, FFTW, Plots, BenchmarkTools
 
 
 N = 128
@@ -13,5 +13,8 @@ println(u_0[1:5])
 au_f = evolve(u_0, t_f, q, kvec, N)
 println(u_0[1:5])
 display(plot(x, au_f))
+@benchmark evolve(u_0, t_f, q, kvec, N)
 
+# @profview_allocs evolve(u_0, t_f, q, kvec, N)
+# @profview evolve(u_0, t_f, q, kvec, N)
 # display(plot(x, abs.(au_f - u_f)))

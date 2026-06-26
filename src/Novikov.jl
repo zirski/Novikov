@@ -3,7 +3,7 @@ module Novikov
 include("utils.jl")
 include("tw.jl")
 
-export gen_kvec, evolve, dscrt, integrate, deriv!, deriv, gen_jacobian
+export gen_kvec, evolve, dscrt, integrate, deriv!, deriv, gen_tw_sol, gen_tw_sol_nlsolve
 
 using FFTW, LinearAlgebra
 
@@ -23,7 +23,7 @@ function evolve(
 
     # rk4 preallocations
     ks = zeros(ComplexF64, Ndiv2 + 1, 4)
-    u_tmp = similar(uhat_buf)
+    uhat_tmp = similar(uhat_buf)
     kvsquared = kvec .^ 2
 
     # scratch buffer for u derivatives: [u_x, u_xx, u_xxx]
@@ -33,7 +33,7 @@ function evolve(
     # We need to perform the derivatives in function space to compute g
     # accurately, which sucks for time efficiency but here we are
     function f!(
-        u::Vector{Float64},
+        u::AbstractArray{Float64,1},
         u_output::AbstractArray{ComplexF64,1},
         u_x::AbstractArray{Float64,1},
         u_xx::AbstractArray{Float64,1},
@@ -45,11 +45,13 @@ function evolve(
         deriv!(u, u_xx, 2, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xxx, 3, uhat_buf, kvec, plan, iplan)
 
-        @. u_output = $*(plan, (-u ^ 2 * (4 * u_x - u_xxx) + 3 * u * u_x * u_xx)) / (1 - kvsquared)
+        @. u = -u ^ 2 * (4 * u_x - u_xxx) + 3 * u * u_x * u_xx
+        mul!(u_output, plan, u)
+        @. u_output /= (1 - kvsquared)
         return nothing
     end
 
-    rk4!(f!, uhat_out, u_func, u_tmp, dus, t_f, q, ks, plan, iplan)
+    rk4!(f!, uhat_out, u_func, uhat_tmp, dus, t_f, q, ks, plan, iplan)
     mul!(u_func, iplan, uhat_out)
     return u_func
 end
