@@ -3,7 +3,7 @@ module Novikov
 include("utils.jl")
 include("tw.jl")
 
-export gen_kvec, evolve, dscrt, integrate, deriv!, deriv, gen_tw_sol, gen_tw_sol_nlsolve
+export gen_kvec, evolve, dscrt, integrate, deriv!, deriv, gen_tw_sol_2, gen_tw_sol_1, gen_tw_sol_3
 
 using FFTW, LinearAlgebra
 
