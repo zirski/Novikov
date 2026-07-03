@@ -1,6 +1,7 @@
-using Revise, StyledStrings
+using Revise, StyledStrings, Novikov
 
 function print_eq(k, N, flag, n)
+    lut = zeros(Int64, 2N + 1, 2N + 1)
     # creates matrix, populates with 0s
     m = Matrix{Tuple{Int,Int,Int}}(undef, 2N + 1, 2N + 1)
     for i = 1:(2N+1)
@@ -77,6 +78,7 @@ function print_eq(k, N, flag, n)
                         matches += 1
                     end
                 end
+                lut[i, j] = matches
                 # if i > 2N + 2 - j
                 #     print("   ")
                 if matches != 0
@@ -105,10 +107,73 @@ function print_eq(k, N, flag, n)
         println()
         println("    |")
     end
+    return lut
 end
 k = 1
-N = 10
+N = 5
 flag = 0
+L = 2pi
+
+luts_ref = [zeros(Int64, 2N+1, 2N+1) for _ ∈ 1:N, _ ∈ 1:N]
+for k ∈ 1:N
+    for n ∈ 1:N
+        luts_ref[k, n] .= print_eq(k, N, flag, n)
+    end
+end
+
+test_fhat = zeros(ComplexF64, N)
+test_fhat[1] = 1
+
+luts_test = gen_jacobian_1(test_fhat, 1, L, N)
+println("----------------------------------------------------------------------")
+println(luts_ref == luts_test)
+
+# for k ∈ 1:N
+#     for n ∈ 1:N
+#         if luts_ref[k, n] != luts_test[k, n]
+#             lut1 = luts_ref[k, n]
+#             lut2 = luts_test[k, n]
+#             println("Equation $k for unknown $n:")
+#             for i ∈ 1:(2N+1)
+#                 for j ∈ 1:(2N+1)
+#                     val = lut1[i, j]
+#                     if val != 0
+#                         val_str = AnnotatedString(string(val), [(1:9, :face, :green)])
+#                         print(val_str, "  ")
+#                     elseif j - N - 1 < -N + i - N - 1 + k || j - N - 1 > N + i - N - 1 + k
+#                         val_str = AnnotatedString(string(val), [(1:9, :face, :red)])
+#                         print(val_str, "  ")
+#                     else
+#                         print(lut1[i, j], "  ")
+#                     end
+#                 end
+#                 println()
+#                 println()
+#             end
+#             println()
+
+#             for i ∈ 1:(2N+1)
+#                 for j ∈ 1:(2N+1)
+#                     val = lut2[i, j]
+#                     if val != 0
+#                         val_str = AnnotatedString(string(val), [(1:9, :face, :green)])
+#                         print(val_str, "  ")
+#                     elseif j - N - 1 < -N + i - N - 1 + k || j - N - 1 > N + i - N - 1 + k
+#                         val_str = AnnotatedString(string(val), [(1:9, :face, :red)])
+#                         print(val_str, "  ")
+#                     else
+#                         print(lut2[i, j], "  ")
+#                     end
+#                 end
+#                 println()
+#                 println()
+#             end
+#             println()
+#         else
+#             println("true")
+#         end
+#     end
+# end
 
 # print_eq(k, 15, 0, 4)
 # print_eq(k, N, flag, 1)
@@ -116,10 +181,10 @@ flag = 0
 # print_eq(k, N, flag, 3)
 # print_eq(k, N, flag, 4)
 
-for k = 1:N
-    println("----------------------------------------------")
-    for n = 1:N
-        print_eq(k, N, 0, n)
-    end
-end
+# for k = 1:N
+#     println("----------------------------------------------")
+#     for n = 1:N
+#         print_eq(k, N, flag, n)
+#     end
+# end
 
