@@ -29,5 +29,6 @@ JuliaLocalPreferences.toml
 docs/
 notes/
 ext_scripts/
+output/
 scripts/tw_sols_test.jl
 .DS_Store
