@@ -1,14 +1,11 @@
 using LinearAlgebra, Printf, NLsolve, StyledStrings
 
-function alpha(c, n, L)
-    lam = 2 * pi / L
+function alpha(c, n, lam)
     return -c * im * lam * n * (1 + (lam * n)^2)
 end
 
-function beta(j, l, L)
-    lam = 2 * pi / L
-    return im * lam * l * (4 + (lam * l)^2 + 3 * lam ^ 2 * l * (j - l))
-    # return 4 * im * lam * l - (im * lam * l)^3 - 3 * im * lam * (j - l) * (im * lam * l)^2
+function beta(j, l, lam)
+    return im * lam * l * (4 + (lam * l) ^ 2 + 3 * lam ^ 2 * l * (j - l))
 end
 
 function gen_combo_indices(k, n)
@@ -32,9 +29,9 @@ function gen_combo_indices(k, n)
     )
 end
 
-function get_fhat(arr::Vector, i::Int64)
+function get_fhat(arr::Vector, i::Int64, mean)
     if i == 0
-        return 0
+        return mean
     elseif i < 0
         return arr[-i]
     else
@@ -46,14 +43,14 @@ function flip_bit!(coll, idx, n::Int)
     coll[idx] ⊻= (UInt8(1) << n)
 end
 
-function gen_jacobian_2(fhat, c, L, N)
+function gen_jacobian_2(fhat, c, N, mean, lam)
     jac = zeros(ComplexF64, N, N)
     elem_terms = zeros(UInt8, 2N + 1)
     lidxs = zeros(Int64, 4)
     bit_indices = [4, 4, 3, 3]
 
     for d ∈ 1:N
-        jac[d, d] = alpha(c, d, L)
+        jac[d, d] = alpha(c, d, lam)
     end
 
     for n ∈ 1:N
@@ -120,15 +117,15 @@ function gen_jacobian_2(fhat, c, L, N)
                         order = data & 3
                         # print(order, "  ")
 
-                        temp_elem = order * beta(j, idx, L) * fhat[n] ^ (order - 1)
+                        temp_elem = order * beta(j, idx, lam) * fhat[n] ^ (order - 1)
                         if h
-                            temp_elem *= get_fhat(fhat, k - j)
+                            temp_elem *= get_fhat(fhat, k - j, mean)
                         end
                         if d
-                            temp_elem *= get_fhat(fhat, j - idx)
+                            temp_elem *= get_fhat(fhat, j - idx, mean)
                         end
                         if v
-                            temp_elem *= get_fhat(fhat, idx)
+                            temp_elem *= get_fhat(fhat, idx, mean)
                         end
                         elem += temp_elem
                     else
@@ -146,13 +143,13 @@ function gen_jacobian_2(fhat, c, L, N)
     return jac
 end
 
-function gen_jacobian_1(fhat::Vector{ComplexF64}, c, L::Float64, N::Int64)
+function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     jac = zeros(ComplexF64, N, N)
     term::ComplexF64 = zero(ComplexF64)
     # main diagonal terms, where k = n = d
     for d in 1:N
         # 3-combinations and alpha term
-        term += alpha(c, d, L) + 3 * (beta(0, d, L) + beta(2d, d, L) + beta(0, -d, L)) * fhat[d] ^ 2
+        term += alpha(c, d, lam) + 3 * (beta(0, d, lam) + beta(2d, d, lam) + beta(0, -d, lam)) * fhat[d] ^ 2
         combo_indices = ((0, d), (2d, d), (0, -d))
         # line segments:
         # We add terms for each j "row", checking if the l-indices are in-bounds for each line.
@@ -165,33 +162,33 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, L::Float64, N::Int64)
             # d1: l = j - n; d2: l = j + n
             # beta * fhat(k - j) * fhat(l)
             if l_bounds[1] <= j - d <= l_bounds[2] && !((j, j - d) in combo_indices)
-                term += beta(j, j - d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j-d)
+                term += beta(j, j - d, lam) * get_fhat(fhat, d-j, mean) * get_fhat(fhat, j-d, mean)
             end
             if l_bounds[1] <= j + d <= l_bounds[2] && !((j, j + d) in combo_indices)
-                term += beta(j, j + d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j+d)
+                term += beta(j, j + d, lam) * get_fhat(fhat, d-j, mean) * get_fhat(fhat, j+d, mean)
             end
 
             # v1, v2: l = n, so positions are invariant of j
             # beta * fhat(k - j) * fhat(j - l)
             if l_bounds[1] <= d <= l_bounds[2] && !((j, d) in combo_indices)
-                term += beta(j, d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j-d)
+                term += beta(j, d, lam) * get_fhat(fhat, d-j, mean) * get_fhat(fhat, j-d, mean)
             end
             if l_bounds[1] <= -d <= l_bounds[2] && !((j, -d) in combo_indices)
-                term += beta(j, -d, L) * get_fhat(fhat, d-j) * get_fhat(fhat, j+d)
+                term += beta(j, -d, lam) * get_fhat(fhat, d-j, mean) * get_fhat(fhat, j+d, mean)
             end
 
             # h1, h2: we can simplify the condition j = k - n, j = k + n since k = n
             if j == 0
                 for l ∈ l_bounds[1]:l_bounds[2]
                     if !((j, l) in combo_indices)
-                        term += beta(j, l, L) * get_fhat(fhat, l) * get_fhat(fhat, l)
+                        term += beta(j, l, lam) * get_fhat(fhat, l, mean) * get_fhat(fhat, l, mean)
                     end
                 end
             end
             if j == 2d
                 for l ∈ l_bounds[1]:l_bounds[2]
                     if !((j, l) in combo_indices)
-                        term += beta(j, l, L) * get_fhat(fhat, j-l) * get_fhat(fhat, l)
+                        term += beta(j, l, lam) * get_fhat(fhat, j-l, mean) * get_fhat(fhat, l, mean)
                     end
                 end
             end
@@ -214,15 +211,15 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, L::Float64, N::Int64)
                         j = combo[1]
                         l = combo[2]
                         f = combo[3]
-                        term_tmp = 2 * beta(j, l, L) * fhat[n]
+                        term_tmp = 2 * beta(j, l, lam) * fhat[n]
                         if j_bounds[1] <= j <= j_bounds[2]
                             if max(-N, -N + j) <= l <= min(N, N + j)
                                 if f == 1
-                                    term_tmp *= get_fhat(fhat, l)
+                                    term_tmp *= get_fhat(fhat, l, mean)
                                 elseif f == 2
-                                    term_tmp *= get_fhat(fhat, k-j)
+                                    term_tmp *= get_fhat(fhat, k-j, mean)
                                 else
-                                    term_tmp *= get_fhat(fhat, j-l)
+                                    term_tmp *= get_fhat(fhat, j-l, mean)
                                 end
                             end
                         end
@@ -233,9 +230,9 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, L::Float64, N::Int64)
                 # special case: if k = 3n, (2n, n) combo is instead a 3-combo and must be counted accordingly.
                 # if not, count it simply as another 2-combo
                 if k == 3n
-                    term += 3 * beta(2n, n, L) * fhat[n] ^ 2
+                    term += 3 * beta(2n, n, lam) * fhat[n] ^ 2
                 elseif j_bounds[1] <= 2n <= j_bounds[2] && max(-N, -N + 2n) <= n <= min(N, N + 2n)
-                    term += 2 * beta(2n, n, L) * fhat[n] * get_fhat(fhat, k - n)
+                    term += 2 * beta(2n, n, lam) * fhat[n] * get_fhat(fhat, k - n, mean)
                 end
 
                 # single lines
@@ -246,32 +243,32 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, L::Float64, N::Int64)
 
                     # d1: l = j - n; d2: l = j + n
                     if l_bounds[1] <= j - n <= l_bounds[2] && !((j, j - n, 1) in combo_indices || (j, j - n, 2) in combo_indices || (j, j - n, 3) in combo_indices)
-                        term += beta(j, j - n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j-n)
+                        term += beta(j, j - n, lam) * get_fhat(fhat, k-j, mean) * get_fhat(fhat, j-n, mean)
                     end
                     if l_bounds[1] <= j + n <= l_bounds[2] && !((j, j + n, 1) in combo_indices || (j, j + n, 2) in combo_indices || (j, j + n, 3) in combo_indices)
-                        term += beta(j, j + n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j+n)
+                        term += beta(j, j + n, lam) * get_fhat(fhat, k-j, mean) * get_fhat(fhat, j+n, mean)
                     end
 
                     # v1, v2; l = +- n
                     if l_bounds[1] <= n <= l_bounds[2] && !((j, n, 1) in combo_indices || (j, n, 2) in combo_indices || (j, n, 3) in combo_indices)
-                        term += beta(j, n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j-n)
+                        term += beta(j, n, lam) * get_fhat(fhat, k-j, mean) * get_fhat(fhat, j-n, mean)
                     end
                     if l_bounds[1] <= -n <= l_bounds[2] && !((j, -n, 1) in combo_indices || (j, -n, 2) in combo_indices || (j, -n, 3) in combo_indices)
-                        term += beta(j, -n, L) * get_fhat(fhat, k-j) * get_fhat(fhat, j+n)
+                        term += beta(j, -n, lam) * get_fhat(fhat, k-j, mean) * get_fhat(fhat, j+n, mean)
                     end
 
                     # h1, h2; k - j = n
                     if j == k - n
                         for l in l_bounds[1]:l_bounds[2]
                             if !((j, l, 1) in combo_indices || (j, l, 2) in combo_indices || (j, l, 3) in combo_indices)
-                                term += beta(j, l, L) * get_fhat(fhat, j-l) * get_fhat(fhat, l)
+                                term += beta(j, l, lam) * get_fhat(fhat, j-l, mean) * get_fhat(fhat, l, mean)
                             end
                         end
                     end
                     if j == k + n
                         for l in l_bounds[1]:l_bounds[2]
                             if !((j, l, 1) in combo_indices || (j, l, 2) in combo_indices || (j, l, 3) in combo_indices)
-                                term += beta(j, l, L) * get_fhat(fhat, j-l) * get_fhat(fhat, l)
+                                term += beta(j, l, lam) * get_fhat(fhat, j-l, mean) * get_fhat(fhat, l, mean)
                             end
                         end
                     end
@@ -284,16 +281,16 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, L::Float64, N::Int64)
     return jac
 end
 
-function F(fhat::Vector{ComplexF64}, c, L, N)
+function F(fhat::Vector{ComplexF64}, c, N, mean, lam)
     sol = zeros(ComplexF64, N)
     for k = 1:N
         sum = zero(ComplexF64)
         for j = (-N+k):(N+k)
             for l = max(-N, -N+j):min(N, N+j)
-                sum += beta(j, l, L) * get_fhat(fhat, k - j) * get_fhat(fhat, j - l) * get_fhat(fhat, l)
+                sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
             end
         end
-        sol[k] = alpha(c, k, L) * fhat[k] + sum
+        sol[k] = alpha(c, k, lam) * fhat[k] + sum
     end
     return sol
 end
@@ -301,13 +298,10 @@ end
 function print_jac(jac, N, re::Bool)
     for n = 1:N
         for k = 1:N
-            if re
-                elem = @sprintf("%+4.5f", real(jac[k, n]))
-                print(elem, "\t")
-            else
-                elem = @sprintf("%+4.5f", imag(jac[k, n]))
-                print(elem, "\t")
-            end
+            val = re ? real(jac[k, n]) : imag(jac[k, n])
+
+            elem = @sprintf("%+08.3f", val)
+            print(elem, "  ")
         end
         println()
     end
@@ -332,28 +326,32 @@ function gen_tw_sol_3(guess::Vector{ComplexF64}, c::Float64, L, N, q)
     return fhat_next
 end
 
-function gen_tw_sol_2(guess::Vector{ComplexF64}, c::Float64, L, N, q)
-    fhat = guess
+function gen_tw_sol_2(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
+    lam = 2pi / L
+    fhat = copy(guess)
     fhat_next = zeros(ComplexF64, N)
     norm_tol = 1e-11
     norm(fhat .- fhat_next)
     for _ in 1:q
-        f = F(fhat, c, L, N)
-        jac = gen_jacobian_1(fhat, c, L, N)
-        fhat_next = fhat .- jac \ f
+        f = F(fhat, c, N, mean, lam)
+        jac = gen_jacobian_1(fhat, c, N, mean, lam)
+        fhat_next .= fhat .- jac \ f
         if norm(abs.(fhat .- fhat_next)) < norm_tol
             return fhat_next
+            # elseif norm(abs.(fhat .- fhat_next)) > 100
+            #     error("Failed to converge")
         end
         println(norm(abs.(fhat .- fhat_next)))
-        fhat = fhat_next
+        fhat .= fhat_next
     end
     return fhat
 end
 
-function gen_tw_sol_1(guess::Vector{ComplexF64}, c::Float64, L, N, q)
+function gen_tw_sol_1(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
+    lam = 2pi / L
     guess_tmp = copy(guess)
-    F_s(x) = F(x, c, L, N - 1)
-    sol = nlsolve(F_s, guess_tmp[2:end], iterations=q)
-    guess_tmp[2:end] .= sol.zero
+    F_s(x) = F(x, c, N, mean, lam)
+    sol = nlsolve(F_s, guess_tmp, iterations=q)
+    guess_tmp .= sol.zero
     return guess_tmp
 end
