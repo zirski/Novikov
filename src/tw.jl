@@ -1,4 +1,4 @@
-using LinearAlgebra, Printf, NLsolve, StyledStrings
+using LinearAlgebra, Printf, NLsolve, StyledStrings, NonlinearSolve
 
 function alpha(c, n, lam)
     return -c * im * lam * n * (1 + (lam * n)^2)
@@ -281,7 +281,7 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     return jac
 end
 
-function F(fhat::Vector{ComplexF64}, c, N, mean, lam)
+function F(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     sol = zeros(ComplexF64, N)
     for k = 1:N
         sum = zero(ComplexF64)
@@ -347,11 +347,26 @@ function gen_tw_sol_2(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
     return fhat
 end
 
-function gen_tw_sol_1(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
+function gen_tw_sol_nl(guess::Vector{ComplexF64}, c::Float64, L, N, mean=0, q=1000)
     lam = 2pi / L
     guess_tmp = copy(guess)
     F_s(x) = F(x, c, N, mean, lam)
     sol = nlsolve(F_s, guess_tmp, iterations=q)
     guess_tmp .= sol.zero
+    return guess_tmp
+end
+
+function gen_tw_sol_nonlinear(guess::Vector{ComplexF64}, c::Float64, L, N::Int64, mean=0)
+    lam = 2pi / L
+    p = (c, N, mean, lam)
+    typeof(p[2])
+    guess_tmp = copy(guess)
+    # NonLinearSolve needs the model function to be of the form f(u, p) where p is a collection of
+    # parameters; so we need to first package the arguments to the F function defined above in an array
+    # and define the function F_s to accept p as its second argument to fit the structure accepted by NLS.
+    F_s(x, p) = F(x, p[1], p[2], p[3], p[4])
+    prob = NonlinearProblem(F_s, guess_tmp, p)
+    sol = solve(prob)
+    guess_tmp .= sol.u
     return guess_tmp
 end
