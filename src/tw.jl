@@ -44,9 +44,7 @@ function flip_bit!(coll, idx, n::Int)
     coll[idx] ⊻= (UInt8(1) << n)
 end
 
-function gen_jacobian_2(fhat, c, N, mean, lam)
-    jac = zeros(ComplexF64, N, N)
-    elem_terms = zeros(UInt8, 2N + 1)
+function gen_jacobian_2!(jac, fhat, term_vec, c, N, mean, lam)
     lidxs = zeros(Int64, 4)
     bit_indices = [4, 4, 3, 3]
 
@@ -60,7 +58,7 @@ function gen_jacobian_2(fhat, c, N, mean, lam)
             elem = zero(Complex)
 
             # For each row of double sum, store the l-indices for all terms where k - j, j - l, and/or l equal n.
-            # each term is stored at it's corresponding l-index in elem_terms, where the value is a UInt8 binary sequence.
+            # each term is stored at it's corresponding l-index in term_vec, where the value is a UInt8 binary sequence.
             #
             # value looks like:     0 0 0 1 1 0 1 0
             #                       7 6 5 4 3 2 1 0
@@ -71,7 +69,7 @@ function gen_jacobian_2(fhat, c, N, mean, lam)
             #                                 These bits store which fhat args equal n; the 0s indicate which leftover fhats should be included in the final derivative
             # In the above example, this term looks like:   beta(j, l, L) * fhat(n)^2 * fhat(l)
             for j ∈ (-N+k):(N+k)
-                fill!(elem_terms, 0)
+                fill!(term_vec, 0)
                 llb = max(-N, -N + j)
                 lrb = min(N, N + j)
 
@@ -83,26 +81,26 @@ function gen_jacobian_2(fhat, c, N, mean, lam)
 
                 for (i, l) in enumerate(lidxs)
                     if llb <= l <= lrb
-                        elem_terms[l+N+1] += 1
-                        flip_bit!(elem_terms, l + N + 1, bit_indices[i])
+                        term_vec[l+N+1] += 1
+                        flip_bit!(term_vec, l + N + 1, bit_indices[i])
                     end
                 end
 
                 # h
                 if abs(k - j) == n
                     for l ∈ llb:lrb
-                        elem_terms[l+N+1] += 1
-                        flip_bit!(elem_terms, l + N + 1, 2)
+                        term_vec[l+N+1] += 1
+                        flip_bit!(term_vec, l + N + 1, 2)
                     end
                 end
                 # println("Element $k, $n with j = $j")
                 # println("-------------matches--------------")
-                # for (idx, data) ∈ enumerate(elem_terms)
+                # for (idx, data) ∈ enumerate(term_vec)
                 #     println("l-index: $(idx - N - 1) -->\t", string(data, base=2, pad=8))
                 # end
                 # println()
 
-                for (aidx, data) ∈ enumerate(elem_terms)
+                for (aidx, data) ∈ enumerate(term_vec)
                     # mapping from julia 1-indexing to -N:N indexing
                     idx = aidx - N - 1
                     if data != 0
@@ -136,12 +134,15 @@ function gen_jacobian_2(fhat, c, N, mean, lam)
                 # println()
             end
             # println(elem)
-            jac[k, n] += elem
+            if k == n
+                jac[k, n] += elem
+            else
+                jac[k, n] = elem
+            end
             # println("----------------------------------")
         end
     end
     # println(jac)
-    return jac
 end
 
 function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
@@ -313,7 +314,9 @@ function print_jac(jac, N, re::Bool)
     println("-----------------------------------------------------------------")
 end
 
-function gen_tw_sol_3(guess::Vector{ComplexF64}, c::Float64, N, q, mean=0)
+function gen_tw_sol_3(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
+    jac = zeros(ComplexF64, N, N)
+    term_vec = zeros(UInt8, 2N + 1)
     lam = 2pi / L
     fhat = copy(guess)
     fhat_next = zeros(ComplexF64, N)
@@ -321,12 +324,11 @@ function gen_tw_sol_3(guess::Vector{ComplexF64}, c::Float64, N, q, mean=0)
     norm(fhat .- fhat_next)
     for _ in 1:q
         f = F(fhat, c, N, mean, lam)
-        jac = gen_jacobian_2(fhat, c, N, mean, lam)
+        gen_jacobian_2!(jac, fhat, term_vec, c, N, mean, lam)
         fhat_next .= fhat .- jac \ f
         if norm(abs.(fhat .- fhat_next)) < norm_tol
             return fhat_next
         end
-        println(norm(abs.(fhat .- fhat_next)))
         fhat .= fhat_next
     end
     return fhat_next
