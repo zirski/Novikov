@@ -1,4 +1,4 @@
-using LinearAlgebra, Printf, NLsolve, StyledStrings, NonlinearSolve
+using LinearAlgebra, Printf, StyledStrings, NonlinearSolve
 
 function alpha(c, n, lam)
     return -c * im * lam * n * (1 + (lam * n)^2)
@@ -8,6 +8,7 @@ function beta(j, l, lam)
     return im * lam * l * (4 + (lam * l) ^ 2 + 3 * lam ^ 2 * l * (j - l))
 end
 
+# Generates combinations of 2 fhat terms; combinations of 3 are used in the diagonal case
 function gen_combo_indices(k, n)
     return (
         # flag in last element corresponds to which fhat term is left out (and included in the derivative term):
@@ -296,26 +297,31 @@ function F(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
 end
 
 function print_jac(jac, N, re::Bool)
-    for n = 1:N
-        for k = 1:N
+    for k = 1:N
+        for n = 1:N
             val = re ? real(jac[k, n]) : imag(jac[k, n])
-
             elem = @sprintf("%+08.3f", val)
-            print(elem, "  ")
+            if val != 0
+                elem_styled = AnnotatedString(elem, [(1:9, :face, :green)])
+                print(elem_styled, "  ")
+            else
+                print(elem, "  ")
+            end
         end
         println()
     end
     println("-----------------------------------------------------------------")
 end
 
-function gen_tw_sol_3(guess::Vector{ComplexF64}, c::Float64, L, N, q)
+function gen_tw_sol_3(guess::Vector{ComplexF64}, c::Float64, N, q, mean=0)
+    lam = 2pi / L
     fhat = copy(guess)
     fhat_next = zeros(ComplexF64, N)
     norm_tol = 1e-11
     norm(fhat .- fhat_next)
     for _ in 1:q
-        f = F(fhat, c, L, N)
-        jac = gen_jacobian_2(fhat, c, L, N)
+        f = F(fhat, c, N, mean, lam)
+        jac = gen_jacobian_2(fhat, c, N, mean, lam)
         fhat_next .= fhat .- jac \ f
         if norm(abs.(fhat .- fhat_next)) < norm_tol
             return fhat_next
@@ -347,19 +353,9 @@ function gen_tw_sol_2(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
     return fhat
 end
 
-function gen_tw_sol_nl(guess::Vector{ComplexF64}, c::Float64, L, N, mean=0, q=1000)
-    lam = 2pi / L
-    guess_tmp = copy(guess)
-    F_s(x) = F(x, c, N, mean, lam)
-    sol = nlsolve(F_s, guess_tmp, iterations=q)
-    guess_tmp .= sol.zero
-    return guess_tmp
-end
-
 function gen_tw_sol_nonlinear(guess::Vector{ComplexF64}, c::Float64, L, N::Int64, mean=0)
     lam = 2pi / L
     p = (c, N, mean, lam)
-    typeof(p[2])
     guess_tmp = copy(guess)
     # NonLinearSolve needs the model function to be of the form f(u, p) where p is a collection of
     # parameters; so we need to first package the arguments to the F function defined above in an array
