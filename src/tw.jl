@@ -145,8 +145,7 @@ function gen_jacobian_2!(jac, fhat, term_vec, c, N, mean, lam)
     # println(jac)
 end
 
-function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
-    jac = zeros(ComplexF64, N, N)
+function gen_jacobian_1!(jac, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     term::ComplexF64 = zero(ComplexF64)
     # main diagonal terms, where k = n = d
     for d in 1:N
@@ -201,8 +200,8 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     term = zero(Complex)
 
     # all other terms
+    for n = 1:N
     for k = 1:N
-        for n = 1:N
             if k != n
                 combo_indices = gen_combo_indices(k, n)
                 j_bounds = (-N + k, N + k)
@@ -213,9 +212,8 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
                         j = combo[1]
                         l = combo[2]
                         f = combo[3]
+                        if j_bounds[1] <= j <= j_bounds[2] && max(-N, -N + j) <= l <= min(N, N + j)
                         term_tmp = 2 * beta(j, l, lam) * fhat[n]
-                        if j_bounds[1] <= j <= j_bounds[2]
-                            if max(-N, -N + j) <= l <= min(N, N + j)
                                 if f == 1
                                     term_tmp *= get_fhat(fhat, l, mean)
                                 elseif f == 2
@@ -223,9 +221,8 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
                                 else
                                     term_tmp *= get_fhat(fhat, j-l, mean)
                                 end
-                            end
+                            term += term_tmp
                         end
-                        term += term_tmp
                     end
                 end
 
@@ -234,7 +231,7 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
                 if k == 3n
                     term += 3 * beta(2n, n, lam) * fhat[n] ^ 2
                 elseif j_bounds[1] <= 2n <= j_bounds[2] && max(-N, -N + 2n) <= n <= min(N, N + 2n)
-                    term += 2 * beta(2n, n, lam) * fhat[n] * get_fhat(fhat, k - n, mean)
+                    term += 2 * beta(2n, n, lam) * fhat[n] * get_fhat(fhat, k - 2n, mean)
                 end
 
                 # single lines
@@ -275,16 +272,19 @@ function gen_jacobian_1(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
                         end
                     end
                 end
+                if k == n
+                    jac[k, n] += term
+                else
                 jac[k, n] = term
+                end
                 term = zero(Complex)
             end
         end
     end
-    return jac
+    return nothing
 end
 
-function F(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
-    sol = zeros(ComplexF64, N)
+function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     for k = 1:N
         sum = zero(ComplexF64)
         for j = (-N+k):(N+k)
@@ -292,9 +292,9 @@ function F(fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
                 sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
             end
         end
-        sol[k] = alpha(c, k, lam) * fhat[k] + sum
+        output[k] = alpha(c, k, lam) * fhat[k] + sum
     end
-    return sol
+    return nothing
 end
 
 function print_jac(jac, N, re::Bool)
@@ -335,21 +335,21 @@ function gen_tw_sol_3(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
 end
 
 function gen_tw_sol_2(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
+    jac = zeros(ComplexF64, N, N)
     lam = 2pi / L
     fhat = copy(guess)
+    F_output = similar(guess)
     fhat_next = zeros(ComplexF64, N)
     norm_tol = 1e-11
-    norm(fhat .- fhat_next)
     for _ in 1:q
-        f = F(fhat, c, N, mean, lam)
-        jac = gen_jacobian_1(fhat, c, N, mean, lam)
-        fhat_next .= fhat .- jac \ f
+        F!(F_output, fhat, c, N, mean, lam)
+        gen_jacobian_1!(jac, fhat, c, N, mean, lam)
+        fhat_next .= fhat .- jac \ F_output
         if norm(abs.(fhat .- fhat_next)) < norm_tol
             return fhat_next
-            # elseif norm(abs.(fhat .- fhat_next)) > 100
-            #     error("Failed to converge")
+        elseif norm(abs.(fhat .- fhat_next)) > 100
+            error("Failed to converge")
         end
-        println(norm(abs.(fhat .- fhat_next)))
         fhat .= fhat_next
     end
     return fhat
