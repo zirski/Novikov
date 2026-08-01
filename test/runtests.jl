@@ -12,7 +12,7 @@ using LinearAlgebra
     fhat_guess[2] = 0.05
 
     prob = construct_twsol(fhat_guess, c, L, N_gp=N)
-    au_f = evolve(prob.sol, L / c, 4000, gen_kvec(L, N), N)
+    au_f = evolve(prob.sol, L / c, 4000, gen_kvec(L, N))
     diff = norm(abs.(prob.sol .- au_f))
     @test isapprox(diff, 0, atol=1e-10)
 end
