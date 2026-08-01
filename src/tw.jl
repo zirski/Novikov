@@ -222,7 +222,16 @@ function construct_twsol(guess::Vector{ComplexF64}, c::Float64, L; N_gp=1024, q=
     while real(sum(sol_hat[(N_rf_new-15):N_rf_new])) > mtol
         N_rf_new *= 2
         println("resized to N=$N_rf_new")
-        guess_new = vcat(guess, zeros(ComplexF64, N_rf_new - N_rf))
+
+        guess_new = try
+            vcat(guess, zeros(ComplexF64, N_rf_new - N_rf))
+        catch e
+            if isa(e, ArgumentError)
+                throw(InsufficientModeError("Not enough modes to resolve function", sum(sol_hat[(N_rf_new-15):N_rf_new])))
+            else
+                error(e)
+            end
+        end
         # println(size(guess_new))
         newton!(view(sol_hat, 2:N_rf_new), guess_new[2:end], c, q, mean, lam, tol=ctol)
     end

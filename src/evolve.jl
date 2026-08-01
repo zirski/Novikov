@@ -7,10 +7,11 @@ function evolve(
     t_f::Float64,
     q::Int64,
     kvec::Vector{ComplexF64},
-    N::Int64
 )
+    N = length(u)
     Ndiv2 = div(N, 2)
     uhat_buf = Vector{ComplexF64}(undef, Ndiv2 + 1)
+    println(length(uhat_buf))
     u_func = similar(u)
     plan = plan_rfft(u)
     iplan = plan_irfft(uhat_buf, N)
@@ -36,7 +37,7 @@ function evolve(
         plan,
         iplan
     )
-        deriv!(u, u_x, uhat_buf, kvec, plan, iplan)
+        deriv!(u, u_x, 1, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xx, 2, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xxx, 3, uhat_buf, kvec, plan, iplan)
 

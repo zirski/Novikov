@@ -8,59 +8,39 @@ gen_kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
 # u:    function vector to be differentiated
 # du:   stores pth derivative of u
 # uhat: scratch buffer
-function deriv!(
-    u::AbstractArray{Float64,1},
-    du::AbstractArray{Float64,1},
+@inline function deriv!(
+    u::AbstractArray{T},
+    du::AbstractArray{T},
     p::Integer,
-    uhat::AbstractArray{ComplexF64,1},
-    kvec::AbstractArray{ComplexF64,1},
+    uhat::AbstractArray{S},
+    kvec::AbstractArray{S},
     plan,
     iplan
-)
+) where {T<:Real,S<:Complex}
+    p < zero(p) && throw(DomainError(p, "Exponent p must be positive."))
+    length(uhat) != length(kvec) && throw(ArgumentError("uhat and kvec vectors must be of equivalent size."))
+    length(u) != length(du) && throw(ArgumentError("u and du vectors must be of equivalent size; u has size " * string(length(u)) * " and du has size " * string(length(du)) * "."))
+
     mul!(uhat, plan, u)
     @. uhat = uhat * kvec^p
     mul!(du, iplan, uhat)
+
     return nothing
 end
 
-# 1st-derivative version; faster for single derivatives 
-function deriv!(
-    u::AbstractArray{Float64,1},
-    du::AbstractArray{Float64,1},
-    uhat::AbstractArray{ComplexF64,1},
-    kvec::AbstractArray{ComplexF64,1},
-    plan,
-    iplan
-)
-    mul!(uhat, plan, u)
-    @. uhat = uhat * kvec
-    mul!(du, iplan, uhat)
-    return nothing
-end
-
-function deriv(
-    u::AbstractArray{Float64,1},
-    uhat::AbstractArray{ComplexF64,1},
-    kvec::AbstractArray{ComplexF64,1},
-    plan,
-    iplan
-)
-    mul!(uhat, plan, u)
-    @. uhat = uhat * kvec
-    return iplan * uhat
-end
-
-function deriv(
-    u::AbstractArray{Float64,1},
-    uhat::AbstractArray{ComplexF64,1},
+@inline function deriv(
+    u::AbstractArray{T},
+    uhat::AbstractArray{S},
     p::Integer,
-    kvec::AbstractArray{ComplexF64,1},
+    kvec::AbstractArray{S},
     plan,
     iplan
-)
-    mul!(uhat, plan, u)
-    @. uhat = uhat * kvec^p
-    return iplan * uhat
+) where {T<:Real,S<:Complex}
+
+    du = Vector{S}(undef, length(u))
+    deriv!(u, du, p, uhat, kvec, plan, iplan)
+
+    return du
 end
 
 # Vector-valued rk4 (autonomous)
@@ -75,16 +55,16 @@ end
 #           array size).
 function rk4!(
     f!::Function,
-    uhat::AbstractArray{ComplexF64,1},
-    u::AbstractArray{Float64,1},
-    uhat_tmp::AbstractArray{ComplexF64,1},
-    dus::AbstractArray{Float64,2},
+    uhat::AbstractArray{S},
+    u::AbstractArray{T},
+    uhat_tmp::AbstractArray{S},
+    dus::AbstractArray{T},
     t,
     q,
     ks,
     plan,
     iplan
-)
+) where {T<:Real,S<:Complex}
     dt = t / q
     dtd2 = 0.5 * dt
     # serves two purposes: stores each k after each f! call, and stores uhat in
