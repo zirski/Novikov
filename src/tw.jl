@@ -1,12 +1,7 @@
-using LinearAlgebra, Printf, StyledStrings, NonlinearSolve, Base.Threads
+using LinearAlgebra, Printf, StyledStrings, Base.Threads
 
-function alpha(c, n, lam)
-    return -c * im * lam * n * (1 + (lam * n)^2)
-end
-
-function beta(j, l, lam)
-    return im * lam * l * (4 + (lam * l)^2 + 3 * lam^2 * l * (j - l))
-end
+@inline alpha(c, n, lam) = -c * im * lam * n * (1 + (lam * n)^2)
+@inline beta(j, l, lam) = im * lam * l * (4 + (lam * l)^2 + 3 * lam^2 * l * (j - l))
 
 # Generates combinations of 2 fhat terms; combinations of 3 are used in the diagonal case
 function gen_combo_indices(k, n)
@@ -30,14 +25,15 @@ function gen_combo_indices(k, n)
     )
 end
 
-function get_fhat(arr::Vector, i::Int64, mean)
-    if i == 0
-        return mean
-    elseif i < 0
-        return arr[-i]
-    else
-        return arr[i]
+@inline function get_fhat(arr, i, mean)
+    i == 0 ? mean : i < 0 ? arr[-i] : arr[i]
+end
+
+@inline function check_combos(testcombo, combos)
+    for combo in combos
+        testcombo == combo[1:2] && return true
     end
+    return false
 end
 
 function compute_elem(k, n, fhat, c, N, mean, lam)
@@ -50,7 +46,7 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
     else
         # 2 - combinations
         for combo ∈ combo_indices
-            if combo != (2n, n, 1) && combo != (2n, n, 2) && combo != (2n, n, 3) # we're not counting the (2n, n) combo since it shares indices with 3-combo and requires special logic
+            if combo[1:2] != (2n, n) # we're not counting the (2n, n) combo since it shares indices with 3-combo and requires special logic
                 j = combo[1]
                 l = combo[2]
                 f = combo[3]
@@ -78,36 +74,29 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
     end
 
     # single lines
-    for j = (-N + k):(N + k)
+    for j = (-N+k):(N+k)
         l_bounds = (max(-N, -N + j), min(N, N + j))
         # d1, d2 (h, v are held constant)
         # IMPORTANT: no bounds checking on l since diagonals avoid off-limits areas entirely
 
         # d1: l = j - n; d2: l = j + n
-        if l_bounds[1] <= j - n <= l_bounds[2] && !((j, j - n, 1) in combo_indices || (j, j - n, 2) in combo_indices || (j, j - n, 3) in combo_indices)
+        if l_bounds[1] <= j - n <= l_bounds[2] && !check_combos((j, j - n), combo_indices)
             term += beta(j, j - n, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - n, mean)
         end
-        if l_bounds[1] <= j + n <= l_bounds[2] && !((j, j + n, 1) in combo_indices || (j, j + n, 2) in combo_indices || (j, j + n, 3) in combo_indices)
+        if l_bounds[1] <= j + n <= l_bounds[2] && !check_combos((j, j + n), combo_indices)
             term += beta(j, j + n, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j + n, mean)
         end
 
         # v1, v2; l = +- n
-        if l_bounds[1] <= n <= l_bounds[2] && !((j, n, 1) in combo_indices || (j, n, 2) in combo_indices || (j, n, 3) in combo_indices)
+        if l_bounds[1] <= n <= l_bounds[2] && !check_combos((j, n), combo_indices)
             term += beta(j, n, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - n, mean)
         end
-        if l_bounds[1] <= -n <= l_bounds[2] && !((j, -n, 1) in combo_indices || (j, -n, 2) in combo_indices || (j, -n, 3) in combo_indices)
+        if l_bounds[1] <= -n <= l_bounds[2] && !check_combos((j, -n), combo_indices)
             term += beta(j, -n, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j + n, mean)
         end
 
         # h1, h2; k - j = n
-        if j == k - n
-            for l in l_bounds[1]:l_bounds[2]
-                if !((j, l, 1) in combo_indices || (j, l, 2) in combo_indices || (j, l, 3) in combo_indices)
-                    term += beta(j, l, lam) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
-                end
-            end
-        end
-        if j == k + n
+        if j == k - n || j == k + n
             for l in l_bounds[1]:l_bounds[2]
                 if !((j, l, 1) in combo_indices || (j, l, 2) in combo_indices || (j, l, 3) in combo_indices)
                     term += beta(j, l, lam) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
@@ -118,26 +107,26 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
     return term
 end
 
-function gen_jacobian_single!(jac, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
-    for n ∈ 1:N
-        for k ∈ 1:N
-            jac[k, n] = compute_elem(k, n, fhat, c, N, mean, lam)
+function construct_jacobian!(jac, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
+    if Threads.nthreads() != 1
+        @threads :dynamic for n ∈ 1:N
+            for k ∈ 1:N
+                jac[k, n] = compute_elem(k, n, fhat, c, N, mean, lam)
+            end
         end
-    end
-end
-
-function gen_jacobian_multi!(jac, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
-    @threads :dynamic for n ∈ 1:N
-        for k ∈ 1:N
-            jac[k, n] = compute_elem(k, n, fhat, c, N, mean, lam)
+    else
+        for n ∈ 1:N
+            for k ∈ 1:N
+                jac[k, n] = compute_elem(k, n, fhat, c, N, mean, lam)
+            end
         end
     end
 end
 
 function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
-    for k = 1:N
+    @threads :dynamic for k = 1:N
         sum = zero(ComplexF64)
-        for j = (-N + k):(N + k)
+        for j = (-N+k):(N+k)
             for l = max(-N, -N + j):min(N, N + j)
                 sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
             end
@@ -147,25 +136,24 @@ function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     return nothing
 end
 
-function newton!(sol, guess, c, L, max_q, mean, lam)
-    tol = 1e-11
+function newton!(sol, guess, c, max_q, mean, lam; tol=1e-11)
     N = size(guess, 1)
     tmp = copy(guess)
     jac = zeros(ComplexF64, N, N)
+    diff = 0.0
     for _ in 1:max_q
         F!(sol, tmp, c, N, mean, lam)
-        gen_jacobian_multi!(jac, tmp, c, N, mean, lam)
+        construct_jacobian!(jac, tmp, c, N, mean, lam)
         sol .= tmp .- jac \ sol
         diff = norm(abs.(sol .- tmp))
         if diff < tol
             return nothing
         elseif diff > 10
-            error("Failed to converge; diff=" * diff)
+            throw(ConvergenceError("Blowup; difference between iterations: $diff"))
         end
         tmp .= sol
     end
-    errm = string("Failed to converge; diff=", tol)
-    error(errm)
+    throw(ConvergenceError("Failed to converge; difference between iterations: $diff"))
 end
 
 function print_jac(jac, N, re::Bool)
@@ -185,27 +173,6 @@ function print_jac(jac, N, re::Bool)
     println("-----------------------------------------------------------------")
 end
 
-function gen_tw_sol_single(guess::Vector{ComplexF64}, c::Float64, L, N, q, mean=0)
-    jac = zeros(ComplexF64, N, N)
-    lam = 2pi / L
-    fhat = copy(guess)
-    F_output = similar(guess)
-    fhat_next = zeros(ComplexF64, N)
-    norm_tol = 1e-11
-    for _ in 1:q
-        F!(F_output, fhat, c, N, mean, lam)
-        gen_jacobian_single!(jac, fhat, c, N, mean, lam)
-        fhat_next .= fhat .- jac \ F_output
-        if norm(abs.(fhat .- fhat_next)) < norm_tol
-            return fhat_next
-        elseif norm(abs.(fhat .- fhat_next)) > 10
-            error("Failed to converge")
-        end
-        fhat .= fhat_next
-    end
-    return fhat
-end
-
 struct NovikovProblem
     N
     xvec
@@ -215,34 +182,54 @@ struct NovikovProblem
     sol_hat
 end
 
-function gen_tw_sol_multi(guess::Vector{ComplexF64}, c::Float64, L; N_gp=1024, q=10)
+struct ConvergenceError <: Exception
+    msg::String
+end
+
+struct InsufficientModeError <: Exception
+    msg::String
+    hfm_sum::Float64
+end
+
+function Base.showerror(io::IO, err::InsufficientModeError)
+    print(io, "InsufficientModeError: ")
+    print(io, err.msg * " sum of last 15 modes: " * err.hfm_sum)
+end
+
+function Base.showerror(io::IO, err::ConvergenceError)
+    print(io, "ConvergenceError: ")
+    print(io, err.msg)
+end
+
+
+function construct_twsol(guess::Vector{ComplexF64}, c::Float64, L; N_gp=1024, q=20, ctol=1e-12, mtol=1e-12)
     N_fd = div(N_gp, 2) + 1
-    xvec = collect(1:(N_gp)) * L / (N_gp + 1)
+    xvec = collect(0:(N_gp-1)) * L / N_gp
     lam = 2pi / L
     N_rf = size(guess, 1)
     mean = real(guess[1])
     sol_hat = zeros(ComplexF64, N_fd)
     sol_hat[1] = mean
-    sol_phys = zeros(N_gp)
-    guess_phys = similar(sol_phys)
-    iplan = plan_irfft(sol_hat, size(sol_phys, 1))
+    sol = zeros(N_gp)
+    guess_phys = similar(sol)
+    iplan = plan_irfft(sol_hat, size(sol, 1))
 
-    newton!(view(sol_hat, 2:N_rf), guess[2:end], c, L, q, mean, lam)    
+    newton!(view(sol_hat, 2:N_rf), guess[2:end], c, q, mean, lam, tol=ctol)
 
     # we only need to consider the real component because imaginary part of fourier coefficients
     #  will be zero for all even solutions
     N_rf_new = N_rf
-    while real(sol_hat[N_rf_new]) > 1e-12
+    while real(sum(sol_hat[(N_rf_new-15):N_rf_new])) > mtol
         N_rf_new *= 2
         println("resized to N=$N_rf_new")
         guess_new = vcat(guess, zeros(ComplexF64, N_rf_new - N_rf))
         # println(size(guess_new))
-        newton!(view(sol_hat, 2:N_rf_new), guess_new[2:end], c, L, q, mean, lam)    
+        newton!(view(sol_hat, 2:N_rf_new), guess_new[2:end], c, q, mean, lam, tol=ctol)
     end
 
-    mul!(sol_phys, iplan, sol_hat * N_gp)
+    mul!(sol, iplan, sol_hat * N_gp)
     mul!(guess_phys, iplan, vcat(guess, zeros(ComplexF64, N_fd - N_rf)) * N_gp)
-    circshift!(sol_phys, div(N_gp, 2))
+    circshift!(sol, div(N_gp, 2))
     circshift!(guess_phys, div(N_gp, 2))
-    return NovikovProblem(N_rf_new, xvec, guess_phys, guess, sol_phys, sol_hat)
+    return NovikovProblem(N_rf_new, xvec, guess_phys, guess, sol, sol_hat)
 end
