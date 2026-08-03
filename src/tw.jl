@@ -4,8 +4,8 @@ using LinearAlgebra, Printf, StyledStrings, Base.Threads
 @inline beta(j, l, lam) = im * lam * l * (4 + (lam * l)^2 + 3 * lam^2 * l * (j - l))
 
 # Generates combinations of 2 fhat terms; combinations of 3 are used in the diagonal case
-function gen_combo_indices(k, n)
-    return (
+@inline gen_combo_indices(k, n) = 
+     (
         # flag in last element corresponds to which fhat term is left out (and included in the derivative term):
         # 1: vertical
         # 2: horizontal
@@ -23,7 +23,6 @@ function gen_combo_indices(k, n)
         (k + n, k + 2n, 1),  # h2, d2
         (k + n, k, 1)        # h2, d1
     )
-end
 
 @inline function get_fhat(arr, i, mean)
     i == 0 ? mean : i < 0 ? arr[-i] : arr[i]
@@ -42,7 +41,7 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
     j_bounds = (-N + k, N + k)
 
     if k == n
-        term += alpha(c, n, lam) + 3 * (beta(0, n, lam) + beta(2n, n, lam) + beta(0, -n, lam)) * fhat[n]^2
+        term = alpha(c, n, lam) + 3 * (beta(0, n, lam) + beta(2n, n, lam) + beta(0, -n, lam)) * fhat[n]^2
     else
         # 2 - combinations
         for combo ∈ combo_indices
@@ -124,14 +123,26 @@ function construct_jacobian!(jac, fhat::Vector{ComplexF64}, c, N::Int64, mean, l
 end
 
 function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
-    @threads :dynamic for k = 1:N
-        sum = zero(ComplexF64)
-        for j = (-N+k):(N+k)
-            for l = max(-N, -N + j):min(N, N + j)
-                sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
+    if Threads.nthreads() != 1
+        @threads :dynamic for k = 1:N
+            sum = zero(ComplexF64)
+            for j = (-N+k):(N+k)
+                for l = max(-N, -N+j):min(N, N+j)
+                    sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
+                end
             end
+            output[k] = alpha(c, k, lam) * fhat[k] + sum
         end
-        output[k] = alpha(c, k, lam) * fhat[k] + sum
+    else
+        for k = 1:N
+            sum = zero(ComplexF64)
+            for j = (-N+k):(N+k)
+                for l = max(-N, -N+j):min(N, N+j)
+                    sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
+                end
+            end
+            output[k] = alpha(c, k, lam) * fhat[k] + sum
+        end
     end
     return nothing
 end
@@ -144,7 +155,7 @@ function newton!(sol, guess, c, max_q, mean, lam; tol=1e-11)
     for _ in 1:max_q
         F!(sol, tmp, c, N, mean, lam)
         construct_jacobian!(jac, tmp, c, N, mean, lam)
-        sol .= tmp .- jac \ sol
+        sol .= tmp .- lu!(jac) \ sol
         diff = norm(abs.(sol .- tmp))
         if diff < tol
             return nothing
