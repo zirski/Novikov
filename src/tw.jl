@@ -97,7 +97,7 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
         # h1, h2; k - j = n
         if j == k - n || j == k + n
             for l in l_bounds[1]:l_bounds[2]
-                if !((j, l, 1) in combo_indices || (j, l, 2) in combo_indices || (j, l, 3) in combo_indices)
+                if !check_combos((j, l), combo_indices)
                     term += beta(j, l, lam) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
                 end
             end
@@ -158,7 +158,11 @@ function newton!(sol, guess, c, max_q, mean, lam; tol=1e-11)
         sol .= tmp .- lu!(jac) \ sol
         diff = norm(abs.(sol .- tmp))
         if diff < tol
-            return nothing
+            if isapprox(sol[1], 0, atol=1e-10)
+                throw(ConvergenceError("Trivial solution."))
+            else
+                return nothing
+            end
         elseif diff > 10
             throw(ConvergenceError("Blowup; difference between iterations: $diff"))
         end
@@ -186,6 +190,7 @@ end
 
 struct NovikovProblem
     N
+    c
     xvec
     guess
     guess_hat
@@ -251,5 +256,5 @@ function construct_twsol(guess::Vector{ComplexF64}, c::Float64, L; N_gp=1024, q=
     mul!(guess_phys, iplan, vcat(guess, zeros(ComplexF64, N_fd - N_rf)) * N_gp)
     circshift!(sol, div(N_gp, 2))
     circshift!(guess_phys, div(N_gp, 2))
-    return NovikovProblem(N_rf_new, xvec, guess_phys, guess, sol, sol_hat)
+    return NovikovProblem(N_rf_new, c, xvec, guess_phys, guess, sol, sol_hat)
 end
