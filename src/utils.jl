@@ -1,5 +1,6 @@
-using FFTW, LinearAlgebra
+module Utils
 
+using FFTW, LinearAlgebra
 # Generates vector of complex values to be applied during derivative calculations. 
 gen_kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
 
@@ -113,4 +114,6 @@ function integrate(u, L, N)
         sum += dx * u[i]
     end
     return sum
+end
+
 end

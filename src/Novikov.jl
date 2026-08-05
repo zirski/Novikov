@@ -2,17 +2,24 @@ module Novikov
 
 include("tw.jl")
 include("evolve.jl")
+include("utils.jl")
+include("fs.jl")
 
-export gen_kvec,
+export
+# modules
+    Utils,
+
+# functions
     evolve,
-    dscrt,
-    integrate,
-    deriv!,
-    deriv,
     construct_twsol,
     construct_jacobian!,
     F!,
     print_jac,
+    writeoutput,
+    readoutput,
+    appendoutput,
+
+# errors
     ConvergenceError,
     InsufficientModeError
 

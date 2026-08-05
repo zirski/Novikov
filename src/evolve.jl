@@ -1,7 +1,5 @@
 using FFTW, LinearAlgebra
 
-include("utils.jl")
-
 function evolve(
     u::Vector{Float64},
     t_f::Float64,
@@ -37,9 +35,9 @@ function evolve(
         plan,
         iplan
     )
-        deriv!(u, u_x, 1, uhat_buf, kvec, plan, iplan)
-        deriv!(u, u_xx, 2, uhat_buf, kvec, plan, iplan)
-        deriv!(u, u_xxx, 3, uhat_buf, kvec, plan, iplan)
+        Utils.deriv!(u, u_x, 1, uhat_buf, kvec, plan, iplan)
+        Utils.deriv!(u, u_xx, 2, uhat_buf, kvec, plan, iplan)
+        Utils.deriv!(u, u_xxx, 3, uhat_buf, kvec, plan, iplan)
 
         @. u = -u ^ 2 * (4 * u_x - u_xxx) + 3 * u * u_x * u_xx
         mul!(u_output, plan, u)
@@ -47,7 +45,7 @@ function evolve(
         return nothing
     end
 
-    rk4!(f!, uhat_out, u_func, uhat_tmp, dus, t_f, q, ks, plan, iplan)
+    Utils.rk4!(f!, uhat_out, u_func, uhat_tmp, dus, t_f, q, ks, plan, iplan)
     mul!(u_func, iplan, uhat_out)
     return u_func
 end
