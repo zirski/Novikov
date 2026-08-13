@@ -1,6 +1,4 @@
-module Utils
-
-using FFTW, LinearAlgebra
+using FFTW, LinearAlgebra, Dates
 # Generates vector of complex values to be applied during derivative calculations. 
 gen_kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
 
@@ -116,4 +114,13 @@ function integrate(u, L, N)
     return sum
 end
 
+function log(msg)
+    open(LOG_PATH, "a") do io
+        write(io, Base.string(now()) * ": " * msg * "\n")
+    end
+end
+
+function istw(sol, c, L)
+    au_f = evolve(sol, L / c, 5000, gen_kvec(L, length(sol)))
+    return isapprox(norm(abs.(sol .- au_f)), 0, atol=1e-9)
 end

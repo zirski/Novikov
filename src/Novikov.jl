@@ -4,12 +4,16 @@ include("tw.jl")
 include("evolve.jl")
 include("utils.jl")
 include("fs.jl")
+include("da.jl")
+
+const LOG_PATH = "/Users/tobyhammond/research/NovikovSolver/Novikov/log/log.txt"
 
 export
-# modules
-    Utils,
-
-# functions
+    # functions
+    dscrt,
+    integrate,
+    deriv!,
+    deriv,
     evolve,
     construct_twsol,
     construct_jacobian!,
@@ -18,9 +22,20 @@ export
     writeoutput,
     readoutput,
     appendoutput,
+    sortoutput,
+    getsol,
+    extend_amp,
+    amplim,
+    gen_kvec,
+    istw,
 
-# errors
+    # errors
     ConvergenceError,
-    InsufficientModeError
+    InsufficientModeError,
+
+    # structs
+    NovikovProblem,
+    NovikovSolution,
+    FileHeader
 
 end # module Novikov

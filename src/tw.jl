@@ -4,8 +4,8 @@ using LinearAlgebra, Printf, StyledStrings, Base.Threads
 @inline beta(j, l, lam) = im * lam * l * (4 + (lam * l)^2 + 3 * lam^2 * l * (j - l))
 
 # Generates combinations of 2 fhat terms; combinations of 3 are used in the diagonal case
-@inline gen_combo_indices(k, n) = 
-     (
+@inline gen_combo_indices(k, n) =
+    (
         # flag in last element corresponds to which fhat term is left out (and included in the derivative term):
         # 1: vertical
         # 2: horizontal
@@ -127,7 +127,7 @@ function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
         @threads :dynamic for k = 1:N
             sum = zero(ComplexF64)
             for j = (-N+k):(N+k)
-                for l = max(-N, -N+j):min(N, N+j)
+                for l = max(-N, -N + j):min(N, N + j)
                     sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
                 end
             end
@@ -137,7 +137,7 @@ function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
         for k = 1:N
             sum = zero(ComplexF64)
             for j = (-N+k):(N+k)
-                for l = max(-N, -N+j):min(N, N+j)
+                for l = max(-N, -N + j):min(N, N + j)
                     sum += beta(j, l, lam) * get_fhat(fhat, k - j, mean) * get_fhat(fhat, j - l, mean) * get_fhat(fhat, l, mean)
                 end
             end
@@ -189,13 +189,20 @@ function print_jac(jac, N, re::Bool)
 end
 
 struct NovikovProblem
-    N
+    N_modes
     c
     xvec
     guess
     guess_hat
     sol
     sol_hat
+end
+
+struct NovikovSolution
+    c
+    L
+    sol
+    N
 end
 
 struct ConvergenceError <: Exception
@@ -209,7 +216,7 @@ end
 
 function Base.showerror(io::IO, err::InsufficientModeError)
     print(io, "InsufficientModeError: ")
-    print(io, err.msg * " sum of last 15 modes: " * err.hfm_sum)
+    print(io, err.msg * "\nsum of last 15 modes: " * string(err.hfm_sum))
 end
 
 function Base.showerror(io::IO, err::ConvergenceError)
@@ -218,43 +225,55 @@ function Base.showerror(io::IO, err::ConvergenceError)
 end
 
 
-function construct_twsol(guess::Vector{ComplexF64}, c::Float64, L; N_gp=1024, q=20, ctol=1e-12, mtol=1e-12)
+function construct_twsol(
+    guess::Vector{ComplexF64},
+    c::Float64,
+    L;
+    N_gp=1024,
+    N_fs=64,
+    q=20,
+    ctol=1e-12,
+    mtol=1e-12,
+    maxmodes=div(N_gp, 2) + 1
+)
+    maxmodes < N_fs && throw(ArgumentError("Specified maximum number of modes smaller than initial number of modes."))
+
     N_fd = div(N_gp, 2) + 1
-    xvec = collect(0:(N_gp-1)) * L / N_gp
     lam = 2pi / L
-    N_rf = size(guess, 1)
     mean = real(guess[1])
+
+    xvec = collect(0:(N_gp-1)) * L / N_gp
     sol_hat = zeros(ComplexF64, N_fd)
     sol_hat[1] = mean
-    sol = zeros(N_gp)
+    sol = Vector{Float64}(undef, N_gp)
     guess_phys = similar(sol)
-    iplan = plan_irfft(sol_hat, size(sol, 1))
 
-    newton!(view(sol_hat, 2:N_rf), guess[2:end], c, q, mean, lam, tol=ctol)
+    iplan = plan_irfft(sol_hat, length(sol))
 
-    # we only need to consider the real component because imaginary part of fourier coefficients
-    #  will be zero for all even solutions
-    N_rf_new = N_rf
-    while real(sum(sol_hat[(N_rf_new-15):N_rf_new])) > mtol
-        N_rf_new *= 2
-        println("resized to N=$N_rf_new")
+    # for efficiency, newton's method is only run over the minimum amount of modes to resolve the solution accurately
+    newton!(view(sol_hat, 2:N_fs), guess[2:N_fs], c, q, mean, lam, tol=ctol)
 
-        guess_new = try
-            vcat(guess, zeros(ComplexF64, N_rf_new - N_rf))
-        catch e
-            if isa(e, ArgumentError)
-                throw(InsufficientModeError("Not enough modes to resolve function", sum(sol_hat[(N_rf_new-15):N_rf_new])))
-            else
-                error(e)
-            end
+    N_fs_new = N_fs
+
+    # increment amount of modes used in NM if highest-frequency modes are higher-valued than desired, as set by mtol
+    while real(sum(sol_hat[(N_fs_new-15):N_fs_new])) > mtol
+        if N_fs_new * 2 > maxmodes
+            throw(InsufficientModeError("Not enough modes to resolve function.", real(sum(sol_hat[(N_fs_new-15):N_fs_new]))))
+        else
+            N_fs_new *= 2
         end
-        # println(size(guess_new))
-        newton!(view(sol_hat, 2:N_rf_new), guess_new[2:end], c, q, mean, lam, tol=ctol)
+
+        log("resized to N=$N_fs_new")
+        newton!(view(sol_hat, 2:N_fs_new), guess[2:N_fs_new], c, q, mean, lam, tol=ctol)
+    end
+
+    if length(guess) == div(length(guess_phys), 2) + 1
+        mul!(guess_phys, iplan, guess * N_gp)
+    else
+        mul!(guess_phys, iplan, vcat(guess, zeros(N_fd - N_fs_new)))
     end
 
     mul!(sol, iplan, sol_hat * N_gp)
-    mul!(guess_phys, iplan, vcat(guess, zeros(ComplexF64, N_fd - N_rf)) * N_gp)
-    circshift!(sol, div(N_gp, 2))
-    circshift!(guess_phys, div(N_gp, 2))
-    return NovikovProblem(N_rf_new, c, xvec, guess_phys, guess, sol, sol_hat)
+
+    return NovikovProblem(N_fs_new, c, xvec, guess_phys, guess, sol, sol_hat)
 end
