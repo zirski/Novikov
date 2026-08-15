@@ -191,6 +191,7 @@ end
 struct NovikovProblem
     N_modes
     c
+    L
     xvec
     guess
     guess_hat
@@ -275,5 +276,5 @@ function construct_twsol(
 
     mul!(sol, iplan, sol_hat * N_gp)
 
-    return NovikovProblem(N_fs_new, c, xvec, guess_phys, guess, sol, sol_hat)
+    return NovikovProblem(N_fs_new, c, L, xvec, guess_phys, guess, sol, sol_hat)
 end

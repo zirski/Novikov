@@ -20,10 +20,12 @@ function extend_amp(L_start, L_end, idx_src)
     prob = construct_twsol(rfft(sol_src) / N, c, Lrange[2], N_gp=N)
     push!(sols_dest, prob.sol)
 
-    for L in Lrange[3:end]
+    iter = tqdm(Lrange[3:end])
+    for L in iter
         try
             prob = construct_twsol(prob.sol_hat, c, L, N_gp=N)
             push!(sols_dest, prob.sol)
+            set_postfix(iter, Lines=L)
         catch e
             if e isa ConvergenceError
                 throw(ArgumentError("Specified source solution cannot be extended; try one with a smaller amplitude"))
@@ -35,6 +37,7 @@ function extend_amp(L_start, L_end, idx_src)
 
     header = FileHeader(c, L_start, N)
     writeoutput(outpath, header, (Lrange, sols_dest))
+    log("Test completed; wrote " * string(num_dest) * " lines to " * string(outpath))
     return nothing
 end
 
@@ -67,7 +70,7 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
     for i in iter
         if !inc_lim
             try
-                prob_inc = construct_twsol(prob_inc.sol_hat, c_inc, L, N_gp=N, maxmodes=maxmodes, N_fs=prob_inc.N_modes)
+                prob_inc = construct_twsol(prob_inc.sol_hat, c_inc, L, N_gp=N, maxmodes=maxmodes)
 
                 push!(sols, prob_inc.sol)
                 push!(cs, c_inc)
@@ -85,7 +88,7 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
 
         if !dec_lim
             try
-                prob_dec = construct_twsol(prob_dec.sol_hat, c_dec, L, N_gp=N, maxmodes=maxmodes, N_fs=prob_dec.N_modes)
+                prob_dec = construct_twsol(prob_dec.sol_hat, c_dec, L, N_gp=N, maxmodes=maxmodes)
 
                 if isapprox(prob_dec.sol_hat[2], 0, atol=1e-15)
                     dec_lim = true
@@ -123,4 +126,21 @@ function amplim(L; dc, max_q, maxmodes)
     inpath = joinpath("output", "L_ext_" * Base.string(Int(L / pi) - 1) * "pi_" * Base.string(Int(L / pi)) * "pi.txt")
     amplim(inpath, L, dc=dc, max_q=max_q, maxmodes=maxmodes)
     return nothing
+end
+
+function Plots.plot(sol::NovikovSolution; kwargs...)
+    xvec = collect(0:(sol.N-1)) * sol.L / sol.N
+    Plots.plot(xvec, sol.sol; kwargs...)
+end
+
+function Plots.plot!(sol::NovikovSolution; kwargs...)
+    @nospecialize
+    xvec = collect(0:(sol.N-1)) * sol.L / sol.N
+    local plt
+    try
+        plt = Plots.current()
+    catch
+        return Plots.plot(sol; kwargs...)
+    end
+    return Plots.plot!(current(), xvec, sol.sol; kwargs...)
 end

@@ -116,11 +116,15 @@ end
 
 function log(msg)
     open(LOG_PATH, "a") do io
-        write(io, Base.string(now()) * ": " * msg * "\n")
+        write(io, string(now()) * ": " * msg * "\n")
     end
 end
 
 function istw(sol, c, L)
     au_f = evolve(sol, L / c, 5000, gen_kvec(L, length(sol)))
-    return isapprox(norm(abs.(sol .- au_f)), 0, atol=1e-9)
+    return norm(abs.(sol .- au_f))
+end
+
+function istw(sol::T) where T<:Union{NovikovProblem,NovikovSolution}
+    return istw(sol.sol, sol.c, sol.L)
 end

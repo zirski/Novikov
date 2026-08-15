@@ -1,11 +1,11 @@
 using FFTW, LinearAlgebra
 
 function evolve(
-    u::Vector{Float64},
+    u::AbstractVector{R},
     t_f::Float64,
     q::Int64,
-    kvec::Vector{ComplexF64},
-)
+    kvec::AbstractVector{C},
+) where {R<:Real, C<:Complex}
     N = length(u)
     Ndiv2 = div(N, 2)
     uhat_buf = Vector{ComplexF64}(undef, Ndiv2 + 1)
@@ -26,14 +26,14 @@ function evolve(
     # We need to perform the derivatives in function space to compute g
     # accurately, which sucks for time efficiency but here we are
     function f!(
-        u::AbstractArray{Float64,1},
-        u_output::AbstractArray{ComplexF64,1},
-        u_x::AbstractArray{Float64,1},
-        u_xx::AbstractArray{Float64,1},
-        u_xxx::AbstractArray{Float64,1},
+        u::AbstractVector{R},
+        u_output::AbstractVector{C},
+        u_x::AbstractVector{R},
+        u_xx::AbstractVector{R},
+        u_xxx::AbstractVector{R},
         plan,
         iplan
-    )
+    ) where {R<:Real, C<:Complex}
         deriv!(u, u_x, 1, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xx, 2, uhat_buf, kvec, plan, iplan)
         deriv!(u, u_xxx, 3, uhat_buf, kvec, plan, iplan)
