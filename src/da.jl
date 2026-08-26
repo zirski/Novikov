@@ -1,8 +1,16 @@
-using ProgressBars, FFTW
+using ProgressBars, FFTW, Plots
 
 function extend_amp(L_start, L_end, idx_src)
-    inpath = joinpath("output", "amp_range_" * Base.string(Int(L_start / pi)) * "pi.txt")
-    outpath = joinpath("output", "L_ext_" * Base.string(Int(L_start / pi)) * "pi_" * Base.string(Int(L_end / pi)) * "pi.txt")
+    log("Starting period extension---------------------------------")
+    local inpath, outpath
+    try
+        inpath = joinpath("output", "amp_range_" * Base.string(Int(L_start / pi)) * "pi.txt")
+        outpath = joinpath("output", "L_ext_" * Base.string(Int(L_start / pi)) * "pi_" * Base.string(Int(L_end / pi)) * "pi.txt")
+    catch
+        inpath = joinpath("output", "amp_range_" * Base.string(Int(L_start / pi)) * "pi.txt")
+        outpath = joinpath("output", "L_ext_" * Base.string(Int(L_start / pi)) * "pi_" * Base.string(L_end / pi) * "pi.txt")
+
+    end
 
     in = sortoutput(inpath)
     num_dest = 1000
@@ -42,7 +50,13 @@ function extend_amp(L_start, L_end, idx_src)
 end
 
 function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
-    outpath = joinpath("output", "amp_range_" * Base.string(Int(L / pi)) * "pi.txt")
+    log("Starting amplitude rangefinding test------------------------- ")
+    local outpath
+    try
+        outpath = joinpath("output", "amp_range_" * Base.string(Int(L / pi)) * "pi.txt")
+    catch
+        outpath = joinpath("output", "amp_range_" * Base.string(L / pi) * "pi.txt")
+    end
     seed = getsol(inpath)
     seed_sol = seed.sol
 
@@ -119,6 +133,7 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
         inc_lim && dec_lim && break
         set_postfix(iter, Lines=lines_written)
     end
+    log("Test completed; wrote ", lines_written, " lines to ", outpath)
     return nothing
 end
 

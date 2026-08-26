@@ -5,6 +5,7 @@ include("evolve.jl")
 include("utils.jl")
 include("fs.jl")
 include("da.jl")
+include("sta.jl")
 
 const LOG_PATH = "/Users/tobyhammond/research/NovikovSolver/Novikov/log/log.txt"
 
@@ -28,6 +29,7 @@ export
     amplim,
     gen_kvec,
     istw,
+    compute_evals,
 
     # errors
     ConvergenceError,
