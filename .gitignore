@@ -32,6 +32,7 @@ Manifest*.toml
 LocalPreferences.toml
 JuliaLocalPreferences.toml
 docs/
+log/
 notes/
 ext_scripts/
 output/
