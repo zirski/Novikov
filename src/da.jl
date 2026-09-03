@@ -1,4 +1,9 @@
-using ProgressBars, FFTW, Plots
+using ProgressBars
+using FFTW
+using Plots
+using Printf
+using LaTeXStrings
+
 
 function extend_amp(L_start, L_end, idx_src)
     log("Starting period extension---------------------------------")

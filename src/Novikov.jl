@@ -11,25 +11,34 @@ const LOG_PATH = "/Users/tobyhammond/research/NovikovSolver/Novikov/log/log.txt"
 
 export
     # functions
+     
+    # utils
     dscrt,
     integrate,
     deriv!,
     deriv,
     evolve,
+
+    # traveling waves
     construct_twsol,
     construct_jacobian!,
     F!,
     print_jac,
-    writeoutput,
-    readoutput,
-    appendoutput,
-    sortoutput,
+
+    # filesystem
+    writesol,
+    writesols,
+    sortsols,
     getsol,
+
+    # data analysis
     extend_amp,
     amplim,
     gen_kvec,
     istw,
     compute_evals,
+    write_evals,
+    plot_evals,
 
     # errors
     ConvergenceError,
@@ -38,6 +47,5 @@ export
     # structs
     NovikovProblem,
     NovikovSolution,
-    FileHeader
 
 end # module Novikov
