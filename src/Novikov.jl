@@ -38,7 +38,10 @@ export
     istw,
     compute_evals,
     write_evals,
-    plot_evals,
+    getevals,
+    plotevals,
+    write_eigen,
+    geteigen,
 
     # errors
     ConvergenceError,

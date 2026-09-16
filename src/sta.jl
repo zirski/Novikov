@@ -50,22 +50,59 @@ end
 
 Never use this method. 
 """
-function compute_evals(N, uhat, mean, c, L, mu)
+function compute_evals(N, uhat, mean, c, L, mu; evecs = false)
     args = (uhat, mean, c, L, mu)
 
-    M_inv = Diagonal([1 / (-im * (1 + vcoef(m, mu, L)^2)) for m = -N:N])
+    M = Diagonal([-im * (1 + vcoef(m, mu, L)^2) for m = -N:N])
     lmat = Array{ComplexF64,2}(undef, 2N + 1, 2N + 1)
     fill_lmat!(lmat, N, args...)
 
-    probmat = M_inv * lmat
+    probmat = inv(M) * lmat
+
+    evecs && return eigen(probmat)
     return eigvals(probmat)
 end
 
-function compute_evals(sol::NovikovSolution, mu)
-    #DEBUG
-    nmodes = 64
-    mean = sum(sol.sol) / sol.N
-    uhat = rfft(sol.sol)[1:nmodes+1] / sol.N
-    return compute_evals(nmodes, uhat[2:end], mean, sol.c, sol.L, mu)
+"""
+    compute_evals(sol, mu; minmodes=128, mtol=1e-12)
+
+Compute the eigenvalues of a perturbed solution `sol` to the NE with the Floquet
+parameter `mu`.
+"""
+function compute_evals(
+    sol::NovikovSolution,
+    mu;
+    minmodes = 128,
+    mtol = 1e-12,
+    kwargs...,
+)
+    solvec = sol.sol
+
+    mean = sum(solvec) / length(solvec)
+    uhat = rfft(solvec) / length(solvec)
+
+    maxmode = length(uhat)
+    !isinteger(log2(maxmode - 1)) && throw(
+        ArgumentError("input solution has an inappropriate number of modes"),
+    )
+
+    while maxmode > minmodes && abs(real(sum(uhat[maxmode-10:maxmode]))) < mtol
+        maxmode = div(maxmode, 2) + 1
+    end
+
+    log(
+        "initiating eval computation with " *
+        Base.string(maxmode) *
+        " unique modes",
+    )
+    return compute_evals(
+        maxmode,
+        uhat[2:maxmode],
+        mean,
+        sol.c,
+        sol.L,
+        mu;
+        kwargs...,
+    )
 end
 

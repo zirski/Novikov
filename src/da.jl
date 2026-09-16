@@ -187,3 +187,19 @@ function Plots.plot!(sol::NovikovSolution; kwargs...)
     end
     return Plots.plot!(current(), xvec, sol.sol; kwargs...)
 end
+
+function plotevals(in, res, out)
+    evals = getevals(in)
+
+    Plots.plot(
+        real(evals[1:res:end]),
+        imag(evals[1:res:end]),
+        seriestype = :scatter,
+        label = "",
+        fontfamily = "Computer Modern",
+        xlabel = L"\Re~(\lambda)",
+        ylabel = L"\Im~(\lambda)",
+    )
+    Plots.savefig(joinpath(dirname(Base.active_project()), "plots", pname))
+    return nothing
+end

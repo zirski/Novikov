@@ -83,4 +83,114 @@ function getsol(filename)
     end
 end
 
-getsol(filename, idx) = sortsols(filename)[idx == :end ? end : idx]
+getsol(filename, idx) = sortsols(filename, false)[idx == :end ? end : idx]
+
+function write_evals(filepath, sol::NovikovSolution, n_pts)
+    evals = []
+
+    log("Initiating eigval computation")
+    for mu in tqdm(range(-pi / sol.L, pi / sol.L, n_pts))
+        eval = compute_evals(sol, mu)
+        push!(evals, eval)
+    end
+
+    evals = reduce(vcat, evals)
+    filter!(x -> abs(real(x)) > 1e-10, evals)
+
+    rm(filepath, force = true)
+    open(filepath, "a") do file
+        println(file, sol.id)
+        for eval in evals
+            println(file, real(eval), '\t', imag(eval))
+        end
+        println("Wrote eigenvalues to ", filepath, ".")
+        return nothing
+    end
+end
+
+function write_eigen(filepath, sol::NovikovSolution, n_pts)
+    evals = []
+    evecs = []
+
+    log("Initiating eigval, eigvec computation")
+
+    for mu in tqdm(range(-pi / sol.L, pi / sol.L, n_pts))
+        eigen = compute_evals(sol, mu, evecs = true)
+        push!(evals, eigen.values)
+        push!(evecs, eigen.vectors)
+    end
+
+    evals = reduce(vcat, evals)
+    evecs = permutedims(reduce(hcat, evecs))
+
+    rm(filepath, force = true)
+    open(filepath, "a") do file
+        println(file, sol.id)
+        for (eval, evec) in zip(evals, eachrow(evecs))
+            println(
+                file,
+                real(eval),
+                '\t',
+                imag(eval),
+                '\t',
+                join(vec(evec), '\t'),
+            )
+        end
+        println("Wrote eigenvalues and eigenvectors to ", filepath, ".")
+        return nothing
+    end
+
+end
+
+function write_evals(sol::NovikovSolution, n_pts)
+    filename = @sprintf "%.4f_%.4f.txt" sol.c sol.L
+    filepath = joinpath(Base.active_project(), "output/evals", filename)
+
+    write_evals(filepath, sol, n_pts)
+    return nothing
+end
+
+
+function getevals(filename)
+    return getevals(getsol(filename))
+end
+
+function getevals(sol::NovikovSolution)
+    eval_files = Dict{UUID,String}()
+    dirpath = joinpath(Base.active_project(), "output/evals")
+
+    for filename in readdir(dirpath)
+        eval_files[UUID(readline(joinpath(dirpath, filename)))] = filename
+    end
+
+    open(eval_files[sol.id], "r") do file
+        evals = Vector{ComplexF64}(undef, countlines(file))
+        seekstart(file)
+        readline(file)
+
+        for (i, line) in enumerate(eachline(file))
+            real, imag = parse.(Float64, split(line, '\t'))
+            evals[i] = Complex(real, imag)
+        end
+
+        return evals
+    end
+end
+
+function geteigen(filename)
+    open(filename, "r") do file
+        readline(file)
+        epairs = []
+
+        for line in eachline(file)
+            elements = split(line, '\t')
+            eval = Complex(
+                parse(Float64, popfirst!(elements)),
+                parse(Float64, popfirst!(elements)),
+            )
+            evec = parse.(ComplexF64, elements)
+            push!(epairs, (eval, evec))
+        end
+        return epairs
+    end
+end
