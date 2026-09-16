@@ -3,84 +3,95 @@ using FFTW
 using Plots
 using Printf
 using LaTeXStrings
+using UUIDs
 
 
-function extend_amp(L_start, L_end, idx_src)
+function extendamp(L_start, L_end, sol_src; num_sols = 1000)
     log("Starting period extension---------------------------------")
-    local inpath, outpath
-    try
-        inpath = joinpath("output", "amp_range_" * Base.string(Int(L_start / pi)) * "pi.txt")
-        outpath = joinpath("output", "L_ext_" * Base.string(Int(L_start / pi)) * "pi_" * Base.string(Int(L_end / pi)) * "pi.txt")
-    catch
-        inpath = joinpath("output", "amp_range_" * Base.string(Int(L_start / pi)) * "pi.txt")
-        outpath = joinpath("output", "L_ext_" * Base.string(Int(L_start / pi)) * "pi_" * Base.string(L_end / pi) * "pi.txt")
 
-    end
+    Lrange = collect(range(L_start, L_end, num_sols))
+    sols = Vector{NovikovSolution}(undef, 0)
 
-    in = sortoutput(inpath)
-    num_dest = 1000
-    N = in.header.N
-    clist = in.fields[1]
-    sols_src = in.fields[2]
-
-    sol_src = vec(sols_src[idx_src, :])
-    c = clist[idx_src]
-
-    Lrange = collect(range(L_start, L_end, num_dest))
-    sols_dest = Vector{Vector{Float64}}(undef, 0)
-
-    push!(sols_dest, sol_src)
-    prob = construct_twsol(rfft(sol_src) / N, c, Lrange[2], N_gp=N)
-    push!(sols_dest, prob.sol)
+    push!(sols, sol_src)
+    prob = construct_twsol(
+        rfft(sol_src) / sol_src.N,
+        sol_src.c,
+        Lrange[2],
+        N_gp = sol_src.N,
+    )
+    sol = NovikovSolution(uuid4(), sol_src.c, L_start, prob.H, prob.sol, sol_src.N)
+    push!(sols, sol)
 
     iter = tqdm(Lrange[3:end])
     for L in iter
         try
-            prob = construct_twsol(prob.sol_hat, c, L, N_gp=N)
-            push!(sols_dest, prob.sol)
-            set_postfix(iter, Lines=L)
+            prob = construct_twsol(prob.sol_hat, sol_src.c, L, N_gp = sol_src.N)
+            sol = NovikovSolution(uuid4(), sol_src.c, L, prob.H, prob.sol, sol_src.N)
+            push!(sols, prob.sol)
+            set_postfix(iter, Lines = L)
         catch e
             if e isa ConvergenceError
-                throw(ArgumentError("Specified source solution cannot be extended; try one with a smaller amplitude"))
+                throw(
+                    ArgumentError(
+                        "Specified source solution cannot be extended; try one with a smaller amplitude",
+                    ),
+                )
             else
                 error(e)
             end
         end
     end
 
-    header = FileHeader(c, L_start, N)
-    writeoutput(outpath, header, (Lrange, sols_dest))
-    log("Test completed; wrote " * string(num_dest) * " lines to " * string(outpath))
+    writesols("$(L_start)_($L_end).txt", sols)
+
+    log(
+        "Test completed; wrote " *
+        string(num_sols) *
+        " lines to " *
+        string(outpath),
+    )
     return nothing
 end
 
-function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
+function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
     log("Starting amplitude rangefinding test------------------------- ")
-    local outpath
+
+    outpath = "output/ampranges/" * string(L) * ".txt"
+
+    local seedsol
     try
-        outpath = joinpath("output", "amp_range_" * Base.string(Int(L / pi)) * "pi.txt")
-    catch
-        outpath = joinpath("output", "amp_range_" * Base.string(L / pi) * "pi.txt")
+        seedsol = getsol(inpath)
+    catch e
+        if e isa ArgumentError
+            seedsol = getsol(inpath, :L, L)
+        else
+            error(e)
+        end
     end
-    seed = getsol(inpath)
-    seed_sol = seed.sol
-
-    N = seed.N
-    c = seed.c
-
-    header = FileHeader(c, L, seed.N)
-    writeoutput(outpath, header, ([c], seed_sol'))
 
     lines_written = 1
 
     sols = Vector{Vector{Float64}}(undef, 0)
+    push!(sols, seedsol)
     cs = Vector{Float64}(undef, 0)
 
-    c_inc = c + dc
-    c_dec = c - dc
+    c_inc = seedsol.c + dc
+    c_dec = seedsol.c - dc
 
-    prob_inc = construct_twsol(rfft(seed_sol) / N, c_inc, L, N_gp=N, maxmodes=maxmodes)
-    prob_dec = construct_twsol(rfft(seed_sol) / N, c_dec, L, N_gp=N, maxmodes=maxmodes)
+    prob_inc = construct_twsol(
+        rfft(seedsol.sol) / seedsol.N,
+        c_inc,
+        L,
+        N_gp = seedsol.N,
+        maxmodes = maxmodes,
+    )
+    prob_dec = construct_twsol(
+        rfft(seedsol.sol) / seedsol.N,
+        c_dec,
+        L,
+        N_gp = seedsol.N,
+        maxmodes = maxmodes,
+    )
 
     inc_lim = false
     dec_lim = false
@@ -89,7 +100,13 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
     for i in iter
         if !inc_lim
             try
-                prob_inc = construct_twsol(prob_inc.sol_hat, c_inc, L, N_gp=N, maxmodes=maxmodes)
+                prob_inc = construct_twsol(
+                    prob_inc.sol_hat,
+                    c_inc,
+                    L,
+                    N_gp = seedsol.N,
+                    maxmodes = maxmodes,
+                )
 
                 push!(sols, prob_inc.sol)
                 push!(cs, c_inc)
@@ -97,7 +114,11 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
                 lines_written += 1
             catch e
                 if e isa InsufficientModeError
-                    log("upper limit reached for " * string(N) * " modes. ")
+                    log(
+                        "upper limit reached for " *
+                        string(seedsol.N) *
+                        " modes. ",
+                    )
                     inc_lim = true
                 else
                     error(e)
@@ -107,9 +128,15 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
 
         if !dec_lim
             try
-                prob_dec = construct_twsol(prob_dec.sol_hat, c_dec, L, N_gp=N, maxmodes=maxmodes)
+                prob_dec = construct_twsol(
+                    prob_dec.sol_hat,
+                    c_dec,
+                    L,
+                    N_gp = seedsol.N,
+                    maxmodes = maxmodes,
+                )
 
-                if isapprox(prob_dec.sol_hat[2], 0, atol=1e-15)
+                if isapprox(prob_dec.sol_hat[2], 0, atol = 1e-15)
                     dec_lim = true
                     log("lower limit reached; i = " * string(i))
                 else
@@ -130,21 +157,17 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
 
         # write a chunk of solutions to output
         if i % 10 == 0
-            appendoutput(outpath, (cs, sols))
-            # println(lines_written, " lines written to ", outpath, ".")
-            empty!(sols)
-            empty!(cs)
+            writesols(outpath, sols, true)
         end
         inc_lim && dec_lim && break
-        set_postfix(iter, Lines=lines_written)
+        set_postfix(iter, Lines = lines_written)
     end
-    log("Test completed; wrote ", lines_written, " lines to ", outpath)
-    return nothing
-end
-
-function amplim(L; dc, max_q, maxmodes)
-    inpath = joinpath("output", "L_ext_" * Base.string(Int(L / pi) - 1) * "pi_" * Base.string(Int(L / pi)) * "pi.txt")
-    amplim(inpath, L, dc=dc, max_q=max_q, maxmodes=maxmodes)
+    log(
+        "Test completed; wrote " *
+        string(lines_written) *
+        " lines to " *
+        string(outpath),
+    )
     return nothing
 end
 

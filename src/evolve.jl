@@ -2,10 +2,12 @@ using FFTW, LinearAlgebra
 
 function evolve(
     u::AbstractVector{R},
-    t_f::Float64,
-    q::Int64,
+    t_f::Real,
+    q::Real,
     kvec::AbstractVector{C},
 ) where {R<:Real, C<:Complex}
+    t_f < 0 && throw(ArgumentError("Final time cannot be negative."))
+
     N = length(u)
     Ndiv2 = div(N, 2)
     uhat_buf = Vector{ComplexF64}(undef, Ndiv2 + 1)
@@ -44,7 +46,15 @@ function evolve(
         return nothing
     end
 
-    rk4!(f!, uhat_out, u_func, uhat_tmp, dus, t_f, q, ks, plan, iplan)
+    try
+        rk4!(f!, uhat_out, u_func, uhat_tmp, dus, t_f, Int(q), ks, plan, iplan)
+    catch e
+        if e isa ArgumentError
+            throw(ArgumentError("q must be convertable to an integral type."))
+        else
+            error(e)
+        end
+    end
     mul!(u_func, iplan, uhat_out)
     return u_func
 end

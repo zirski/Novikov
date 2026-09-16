@@ -38,9 +38,9 @@ function l_element(k, n, N, args...)
 end
 
 function fill_lmat!(lmat, N, args...)
-    @threads for n = 1:2N+1
-        for m = 1:2N+1
-            lmat[m, n] = l_element(m - N - 1, n - N - 1, N, args...)
+    @threads for n = -N:N
+        for k = -N:N
+            lmat[k+N+1, n+N+1] = l_element(k, n, N, args...)
         end
     end
 end

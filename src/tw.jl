@@ -2,6 +2,9 @@ using LinearAlgebra
 using Printf
 using StyledStrings
 using Base.Threads
+using UUIDs
+
+import Base: isless
 
 @inline alpha(c, n, lam) = -c * im * lam * n * (1 + (lam * n)^2)
 @inline beta(j, l, lam) =
@@ -242,25 +245,50 @@ function print_jac(jac, N, re::Bool)
 end
 
 struct NovikovProblem
-    N_modes::Any
-    c::Any
-    L::Any
-    xvec::Any
-    guess::Any
-    guess_hat::Any
-    sol::Any
-    sol_hat::Any
+    N_modes::Int64
+    c::Float64
+    L::Float64
+    H::Float64
+    xvec::Vector{Float64}
+    guess::Vector{Float64}
+    guess_hat::Vector{ComplexF64}
+    sol::Float64
+    sol_hat::Vector{ComplexF64}
 end
 
+# filesystem struct for reading and writing solutions to files, without
+# unnecessary info
 struct NovikovSolution
-    c::Any
-    L::Any
-    H::Any
-    sol::Any
-    N::Any
+    id::UUID
+    c::Float64
+    L::Float64
+    H::Float64
+    sol::Vector{Float64}
+    N::Int64
 end
 
-Base.isless(a::NovikovSolution, b::NovikovSolution) = Base.isless(a.c, b.c)
+function NovikovSolution(p::NovikovProblem)
+    return NovikovSolution(uuid4(), p.c, p.L, p.H, p.sol, length(p.sol))
+end
+
+function resize(s::NovikovSolution, res)
+    try
+        res = Int(inv(res))
+    catch e
+        if e isa InexactError
+            throw(ArgumentError("resolution must be a fraction with an even denominator."))
+        else
+            error(e)
+        end
+    end
+    res % 2 != 0 && throw(ArgumentError("resolution must have an even inverse."))
+    return NovikovSolution(s.id, s.c, s.L, s.H, s.sol[1:res:end], length(1:res:lastindex(s.sol)))
+end
+
+# subject to change
+isless(a::NovikovSolution, b::NovikovSolution) = isless(a.c, b.c)
+
+isequal(a::NovikovSolution, b::NovikovSolution) = isequal(a.id, b.id)
 
 struct ConvergenceError <: Exception
     msg::String
@@ -350,6 +378,17 @@ function construct_twsol(
     end
 
     mul!(sol, iplan, sol_hat * N_gp)
+    H = maximum(sol) - minimum(sol)
 
-    return NovikovProblem(N_fs_new, c, L, xvec, guess_phys, guess, sol, sol_hat)
+    return NovikovProblem(
+        N_fs_new,
+        c,
+        L,
+        H,
+        xvec,
+        guess_phys,
+        guess,
+        sol,
+        sol_hat,
+    )
 end

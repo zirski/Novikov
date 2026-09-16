@@ -1,6 +1,6 @@
 using FFTW, LinearAlgebra, Dates
 # Generates vector of complex values to be applied during derivative calculations. 
-gen_kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
+kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
 
 # Computes pth derivative of a function using fft technique and stores result in 
 # du; does not mutate u.
@@ -14,11 +14,20 @@ gen_kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
     uhat::AbstractArray{S},
     kvec::AbstractArray{S},
     plan,
-    iplan
+    iplan,
 ) where {T<:Real,S<:Complex}
-    p < zero(p) && throw(DomainError(p, "Exponent p must be positive."))
-    length(uhat) != length(kvec) && throw(ArgumentError("uhat and kvec vectors must be of equivalent size."))
-    length(u) != length(du) && throw(ArgumentError("u and du vectors must be of equivalent size; u has size " * string(length(u)) * " and du has size " * string(length(du)) * "."))
+    p < zero(p) && throw(ArgumentError("Exponent p must be positive."))
+    length(uhat) != length(kvec) &&
+        throw(ArgumentError("uhat and kvec vectors must be of equivalent size."))
+    length(u) != length(du) && throw(
+        ArgumentError(
+            "u and du vectors must be of equivalent size; u has size " *
+            string(length(u)) *
+            " and du has size " *
+            string(length(du)) *
+            ".",
+        ),
+    )
 
     mul!(uhat, plan, u)
     @. uhat = uhat * kvec^p
@@ -30,12 +39,11 @@ end
 @inline function deriv(
     u::AbstractArray{T},
     uhat::AbstractArray{S},
-    p::Integer,
+    p::Int,
     kvec::AbstractArray{S},
     plan,
-    iplan
+    iplan,
 ) where {T<:Real,S<:Complex}
-
     du = Vector{S}(undef, length(u))
     deriv!(u, du, p, uhat, kvec, plan, iplan)
 
@@ -59,10 +67,10 @@ function rk4!(
     uhat_tmp::AbstractArray{S},
     dus::AbstractArray{T},
     t,
-    q,
+    q::Int,
     ks,
     plan,
-    iplan
+    iplan,
 ) where {T<:Real,S<:Complex}
     dt = t / q
     dtd2 = 0.5 * dt
@@ -88,20 +96,20 @@ function rk4!(
         @views f!(u, ks[:, 4], dus[:, 1], dus[:, 2], dus[:, 3], plan, iplan)
 
         # update step.
-        @views @. uhat = uhat + (dt / 6) * (ks[:, 1] + 2 * (ks[:, 2] + ks[:, 3])
-                                            + ks[:, 4])
+        @views @. uhat =
+            uhat + (dt / 6) * (ks[:, 1] + 2 * (ks[:, 2] + ks[:, 3]) + ks[:, 4])
     end
     return nothing
 end
 
 function dscrt(f, a, L, N)
     xvec = collect(0:(N-1)) * (L / N) .+ a
-    return (x=xvec, y=f.(xvec))
+    return (x = xvec, y = f.(xvec))
 end
 
 function dscrt(f, L, N)
     xvec = collect(0:(N-1)) * (L / N)
-    return (x=xvec, y=f.(xvec))
+    return (x = xvec, y = f.(xvec))
 end
 
 function integrate(u, L, N)
@@ -120,11 +128,11 @@ function log(msg)
     end
 end
 
-function istw(sol, c, L)
-    au_f = evolve(sol, L / c, 5000, gen_kvec(L, length(sol)))
+function istw(sol::Vector{Float64}, c::Float64, L::Float64)
+    au_f = evolve(sol, L / c, round(1000 * L / c), kvec(L, length(sol)))
     return norm(abs.(sol .- au_f))
 end
 
-function istw(sol::T) where T<:Union{NovikovProblem,NovikovSolution}
+function istw(sol::T) where {T<:Union{NovikovProblem,NovikovSolution}}
     return istw(sol.sol, sol.c, sol.L)
 end

@@ -10,14 +10,13 @@ include("sta.jl")
 const LOG_PATH = "/Users/tobyhammond/research/NovikovSolver/Novikov/log/log.txt"
 
 export
-    # functions
-     
     # utils
     dscrt,
     integrate,
     deriv!,
     deriv,
     evolve,
+    kvec,
 
     # traveling waves
     construct_twsol,
@@ -26,15 +25,16 @@ export
     print_jac,
 
     # filesystem
+    readsols,
     writesol,
     writesols,
     sortsols,
     getsol,
+    resize,
 
     # data analysis
-    extend_amp,
+    extendamp,
     amplim,
-    gen_kvec,
     istw,
     compute_evals,
     write_evals,
@@ -46,6 +46,6 @@ export
 
     # structs
     NovikovProblem,
-    NovikovSolution,
+    NovikovSolution
 
 end # module Novikov
