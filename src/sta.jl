@@ -64,10 +64,7 @@ function l_element(k, n, N, args...)
     if k == n
         return t1(k, args...) - sum(j -> t2(k, j, n, args...), (-N+k):(N+k))
     else
-        return -sum((-N+k):(N+k)) do j
-            abs(j - n) <= N && return t2(k, j, n, args...)
-            return 0
-        end
+        return -sum(j -> t2(k, j, n, args...), (-N+max(k, n)):(N+min(k, n)))
     end
 end
 
@@ -135,7 +132,7 @@ function compute_evals(
         ArgumentError("input solution has an inappropriate number of modes"),
     )
 
-    while maxmode > minmodes && abs(real(sum(uhat[maxmode-10:maxmode]))) < mtol
+    while maxmode > minmodes && abs(real(sum(uhat[(maxmode-10):maxmode]))) < mtol
         maxmode = div(maxmode, 2) + 1
     end
 
