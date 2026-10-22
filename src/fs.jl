@@ -43,7 +43,7 @@ function readsols(filename)
     end
 end
 
-function sortsols(filename, ow::Bool)
+function sortsols(filename, ow::Bool=false)
     sols = readsols(filename)
     sort!(sols)
     ow && writesols(filename, sols, ow)
@@ -95,7 +95,6 @@ function write_evals(filepath, sol::NovikovSolution, n_pts)
     end
 
     evals = reduce(vcat, evals)
-    filter!(x -> abs(real(x)) > 1e-10, evals)
 
     rm(filepath, force = true)
     open(filepath, "a") do file
@@ -144,7 +143,7 @@ end
 
 function write_evals(sol::NovikovSolution, n_pts)
     filename = @sprintf "%.4f_%.4f.txt" sol.c sol.L
-    filepath = joinpath(Base.active_project(), "output/evals", filename)
+    filepath = joinpath(dirname(Base.active_project()), "output/evals", filename)
 
     write_evals(filepath, sol, n_pts)
     return nothing
@@ -157,13 +156,13 @@ end
 
 function getevals(sol::NovikovSolution)
     eval_files = Dict{UUID,String}()
-    dirpath = joinpath(Base.active_project(), "output/evals")
+    dirpath = "/Users/tobyhammond/research/NovikovSolver/output/evals/"
 
     for filename in readdir(dirpath)
         eval_files[UUID(readline(joinpath(dirpath, filename)))] = filename
     end
 
-    open(eval_files[sol.id], "r") do file
+    open(joinpath(dirpath, eval_files[sol.id]), "r") do file
         evals = Vector{ComplexF64}(undef, countlines(file))
         seekstart(file)
         readline(file)

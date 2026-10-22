@@ -165,39 +165,23 @@ function construct_jacobian!(
 end
 
 function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
-    if Threads.nthreads() != 1
-        @threads :dynamic for k = 1:N
-            sum = zero(ComplexF64)
-            for j = (-N+k):(N+k)
-                for l = max(-N, -N + j):min(N, N + j)
-                    sum +=
-                        beta(j, l, lam) *
-                        get_fhat(fhat, k - j, mean) *
-                        get_fhat(fhat, j - l, mean) *
-                        get_fhat(fhat, l, mean)
-                end
+    @threads :dynamic for k = 1:N
+        sum = zero(ComplexF64)
+        for j = (-N+k):(N+k)
+            for l = max(-N, -N + j):min(N, N + j)
+                sum +=
+                    beta(j, l, lam) *
+                    get_fhat(fhat, k - j, mean) *
+                    get_fhat(fhat, j - l, mean) *
+                    get_fhat(fhat, l, mean)
             end
-            output[k] = alpha(c, k, lam) * fhat[k] + sum
         end
-    else
-        for k = 1:N
-            sum = zero(ComplexF64)
-            for j = (-N+k):(N+k)
-                for l = max(-N, -N + j):min(N, N + j)
-                    sum +=
-                        beta(j, l, lam) *
-                        get_fhat(fhat, k - j, mean) *
-                        get_fhat(fhat, j - l, mean) *
-                        get_fhat(fhat, l, mean)
-                end
-            end
-            output[k] = alpha(c, k, lam) * fhat[k] + sum
-        end
+        output[k] = alpha(c, k, lam) * fhat[k] + sum
     end
     return nothing
 end
 
-function newton!(sol, guess, c, max_q, mean, lam; tol = 1e-11)
+function newton!(sol, guess, c, max_q, mean, lam; tol=1e-11)
     N = size(guess, 1)
     tmp = copy(guess)
     jac = zeros(ComplexF64, N, N)
@@ -208,7 +192,7 @@ function newton!(sol, guess, c, max_q, mean, lam; tol = 1e-11)
         sol .= tmp .- lu!(jac) \ sol
         diff = norm(abs.(sol .- tmp))
         if diff < tol
-            if isapprox(sol[1], 0, atol = 1e-10)
+            if isapprox(sol[1], 0, atol=1e-10)
                 throw(ConvergenceError("Trivial solution."))
             else
                 return nothing
@@ -252,7 +236,7 @@ struct NovikovProblem
     xvec::Vector{Float64}
     guess::Vector{Float64}
     guess_hat::Vector{ComplexF64}
-    sol::Float64
+    sol::Vector{Float64}
     sol_hat::Vector{ComplexF64}
 end
 
@@ -276,13 +260,24 @@ function resize(s::NovikovSolution, res)
         res = Int(inv(res))
     catch e
         if e isa InexactError
-            throw(ArgumentError("resolution must be a fraction with an even denominator."))
+            throw(
+                ArgumentError(
+                    "resolution must be a fraction with an even denominator.",
+                ),
+            )
         else
             error(e)
         end
     end
     res % 2 != 0 && throw(ArgumentError("resolution must have an even inverse."))
-    return NovikovSolution(s.id, s.c, s.L, s.H, s.sol[1:res:end], length(1:res:lastindex(s.sol)))
+    return NovikovSolution(
+        s.id,
+        s.c,
+        s.L,
+        s.H,
+        s.sol[1:res:end],
+        length(1:res:lastindex(s.sol)),
+    )
 end
 
 # subject to change
@@ -314,12 +309,12 @@ function construct_twsol(
     guess::Vector{ComplexF64},
     c::Float64,
     L;
-    N_gp = 1024,
-    N_fs = 64,
-    q = 20,
-    ctol = 1e-12,
-    mtol = 1e-12,
-    maxmodes = div(N_gp, 2) + 1,
+    N_gp=1024,
+    N_fs=64,
+    q=20,
+    ctol=1e-12,
+    mtol=1e-12,
+    maxmodes=div(N_gp, 2) + 1,
 )
     maxmodes < N_fs && throw(
         ArgumentError(
@@ -341,7 +336,7 @@ function construct_twsol(
 
     # for efficiency, newton's method is only run over the minimum amount of
     # modes to resolve the solution accurately
-    newton!(view(sol_hat, 2:N_fs), guess[2:N_fs], c, q, mean, lam, tol = ctol)
+    newton!(view(sol_hat, 2:N_fs), guess[2:N_fs], c, q, mean, lam, tol=ctol)
 
     N_fs_new = N_fs
 
@@ -367,7 +362,7 @@ function construct_twsol(
             q,
             mean,
             lam,
-            tol = ctol,
+            tol=ctol,
         )
     end
 

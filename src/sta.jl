@@ -13,13 +13,13 @@ using FFTW
     return (*(
         +(
             4vcoef(l, mu, L) +
-            vcoef(l, mu, L)^3 +
-            8ucoef(j - l, L) +
-            2ucoef(k - j, L)^3,
+                vcoef(l, mu, L)^3 +
+                8ucoef(j - l, L) +
+                2ucoef(k - j, L)^3,
             3(
                 ucoef(k - j, L) * ucoef(j - l, L)^2 +
-                ucoef(j - l, L)^2 * vcoef(l, mu, L) +
-                ucoef(j - l, L) * vcoef(l, mu, L)^2
+                    ucoef(j - l, L)^2 * vcoef(l, mu, L) +
+                    ucoef(j - l, L) * vcoef(l, mu, L)^2
             ),
         ),
         get_uhat(uhat, k - j, mean) * get_uhat(uhat, j - l, mean),
@@ -28,18 +28,18 @@ end
 
 function l_element(k, n, N, args...)
     if k == n
-        return t1(k, args...) - sum(j -> t2(k, j, n, args...), -N+k:N+k)
+        return t1(k, args...) - sum(j -> t2(k, j, n, args...), (-N+k):(N+k))
     else
-        return sum(max(-2N, -N + k):min(2N, N + k)) do j
-            max(-N, -N + j) <= n <= min(N, N + j) && return t2(k, j, n, args...)
+        return -sum((-N+k):(N+k)) do j
+            abs(j - n) <= N && return t2(k, j, n, args...)
             return 0
         end
     end
 end
 
 function fill_lmat!(lmat, N, args...)
-    @threads for n = -N:N
-        for k = -N:N
+    @threads for n = (-N):N
+        for k = (-N):N
             lmat[k+N+1, n+N+1] = l_element(k, n, N, args...)
         end
     end
@@ -50,10 +50,10 @@ end
 
 Never use this method. 
 """
-function compute_evals(N, uhat, mean, c, L, mu; evecs = false)
+function compute_evals(N, uhat, mean, c, L, mu; evecs=false)
     args = (uhat, mean, c, L, mu)
 
-    M = Diagonal([-im * (1 + vcoef(m, mu, L)^2) for m = -N:N])
+    M = Diagonal([-im * (1 + vcoef(m, mu, L)^2) for m = (-N):N])
     lmat = Array{ComplexF64,2}(undef, 2N + 1, 2N + 1)
     fill_lmat!(lmat, N, args...)
 
@@ -72,8 +72,8 @@ parameter `mu`.
 function compute_evals(
     sol::NovikovSolution,
     mu;
-    minmodes = 128,
-    mtol = 1e-12,
+    minmodes=128,
+    mtol=1e-12,
     kwargs...,
 )
     solvec = sol.sol
@@ -92,8 +92,8 @@ function compute_evals(
 
     log(
         "initiating eval computation with " *
-        Base.string(maxmode) *
-        " unique modes",
+            Base.string(maxmode) *
+            " unique modes",
     )
     return compute_evals(
         maxmode,
