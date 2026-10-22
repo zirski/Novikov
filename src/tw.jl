@@ -6,12 +6,31 @@ using UUIDs
 
 import Base: isless
 
+"""
+    alpha(c, n, lam)
+
+Coefficient of the linear term of mode `n` in the traveling-wave equation with
+speed `c` and base wavenumber `lam = 2π/L`.
+"""
 @inline alpha(c, n, lam) = -c * im * lam * n * (1 + (lam * n)^2)
+"""
+    beta(j, l, lam)
+
+Coefficient of the cubic convolution term `fhat[k-j] * fhat[j-l] * fhat[l]` in
+the traveling-wave equation.
+"""
 @inline beta(j, l, lam) =
     im * lam * l * (4 + (lam * l)^2 + 3 * lam^2 * l * (j - l))
 
-# Generates combinations of 2 fhat terms; combinations of 3 are used in the
-# diagonal case
+"""
+    gen_combo_indices(k, n)
+
+Return the `(j, l, flag)` index triples of the convolution sum for mode `k` in
+which two of the three `fhat` factors have index `±n`; combinations of three
+are handled in the diagonal case of [`compute_elem`](@ref). `flag` indicates
+which factor is left out (and included in the derivative term): 1 for vertical
+(`l`), 2 for horizontal (`k - j`) and 3 for diagonal (`j - l`).
+"""
 @inline gen_combo_indices(k, n) = (
     # flag in last element corresponds to which fhat term is left out (and
     # included in the derivative term):
@@ -33,10 +52,22 @@ import Base: isless
     (k + n, k, 1),        # h2, d1
 )
 
+"""
+    get_fhat(arr, i, mean)
+
+Return the Fourier coefficient of index `i`: `mean` for `i == 0`, otherwise
+`arr[abs(i)]`.
+"""
 @inline function get_fhat(arr, i, mean)
     i == 0 ? mean : i < 0 ? arr[-i] : arr[i]
 end
 
+"""
+    check_combos(testcombo, combos)
+
+Return whether the index pair `testcombo = (j, l)` matches the first two
+entries of any element of `combos`.
+"""
 @inline function check_combos(testcombo, combos)
     for combo in combos
         testcombo == combo[1:2] && return true
@@ -44,6 +75,12 @@ end
     return false
 end
 
+"""
+    compute_elem(k, n, fhat, c, N, mean, lam)
+
+Compute the Jacobian element `∂F_k/∂fhat_n` of the traveling-wave equation
+(see [`F!`](@ref)) truncated to `N` modes.
+"""
 function compute_elem(k, n, fhat, c, N, mean, lam)
     term = zero(ComplexF64)
     combo_indices = gen_combo_indices(k, n)
@@ -141,6 +178,12 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
     return term
 end
 
+"""
+    construct_jacobian!(jac, fhat, c, N, mean, lam)
+
+Fill the `N × N` matrix `jac` with the Jacobian of the traveling-wave equation
+at `fhat`, multithreaded when more than one thread is available.
+"""
 function construct_jacobian!(
     jac,
     fhat::Vector{ComplexF64},
@@ -164,6 +207,12 @@ function construct_jacobian!(
     end
 end
 
+"""
+    F!(output, fhat, c, N, mean, lam)
+
+Evaluate the residual of the traveling-wave equation with speed `c` and base
+wavenumber `lam` for Fourier modes `1:N` of `fhat` and store it in `output`.
+"""
 function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     @threads :dynamic for k = 1:N
         sum = zero(ComplexF64)
@@ -181,6 +230,15 @@ function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     return nothing
 end
 
+"""
+    newton!(sol, guess, c, max_q, mean, lam; tol=1e-11)
+
+Solve the traveling-wave equation for the Fourier coefficients `sol` with
+Newton's method, starting from `guess`, for at most `max_q` iterations.
+
+Throw a `ConvergenceError` if the iteration converges to the trivial solution,
+blows up, or fails to converge to within `tol`.
+"""
 function newton!(sol, guess, c, max_q, mean, lam; tol=1e-11)
     N = size(guess, 1)
     tmp = copy(guess)
@@ -211,6 +269,12 @@ function newton!(sol, guess, c, max_q, mean, lam; tol=1e-11)
     )
 end
 
+"""
+    print_jac(jac, N, re)
+
+Print the real (`re == true`) or imaginary part of the `N × N` Jacobian `jac`,
+with nonzero entries highlighted in green.
+"""
 function print_jac(jac, N, re::Bool)
     for k = 1:N
         for n = 1:N
@@ -251,10 +315,21 @@ struct NovikovSolution
     N::Int64
 end
 
+"""
+    NovikovSolution(p::NovikovProblem)
+
+Convert a `NovikovProblem` into a `NovikovSolution` with a new UUID.
+"""
 function NovikovSolution(p::NovikovProblem)
     return NovikovSolution(uuid4(), p.c, p.L, p.H, p.sol, length(p.sol))
 end
 
+"""
+    resize(s::NovikovSolution, res)
+
+Downsample `s` to a fraction `res` of its grid points by keeping every
+`1/res`th point. `1/res` must be an even integer, e.g. `res = 1/2`.
+"""
 function resize(s::NovikovSolution, res)
     try
         res = Int(inv(res))
@@ -280,9 +355,18 @@ function resize(s::NovikovSolution, res)
     )
 end
 
-# subject to change
+"""
+    isless(a::NovikovSolution, b::NovikovSolution)
+
+Order solutions by wave speed `c`. Subject to change.
+"""
 isless(a::NovikovSolution, b::NovikovSolution) = isless(a.c, b.c)
 
+"""
+    isequal(a::NovikovSolution, b::NovikovSolution)
+
+Return whether `a` and `b` have the same UUID.
+"""
 isequal(a::NovikovSolution, b::NovikovSolution) = isequal(a.id, b.id)
 
 struct ConvergenceError <: Exception
@@ -294,17 +378,49 @@ struct InsufficientModeError <: Exception
     hfm_sum::Float64
 end
 
+"""
+    showerror(io, err::InsufficientModeError)
+
+Print the error message and the sum of the highest modes.
+"""
 function Base.showerror(io::IO, err::InsufficientModeError)
     print(io, "InsufficientModeError: ")
     print(io, err.msg * "\nsum of last 15 modes: " * string(err.hfm_sum))
 end
 
+"""
+    showerror(io, err::ConvergenceError)
+
+Print the error message.
+"""
 function Base.showerror(io::IO, err::ConvergenceError)
     print(io, "ConvergenceError: ")
     print(io, err.msg)
 end
 
 
+"""
+    construct_twsol(guess, c, L; N_gp=1024, N_fs=64, q=20, ctol=1e-12,
+                    mtol=1e-12, maxmodes=div(N_gp, 2) + 1)
+
+Compute a traveling-wave solution with speed `c` and period `L` with Newton's
+method, starting from the Fourier coefficients `guess` (normalized `rfft`
+output; `guess[1]` is the mean).
+
+Newton's method starts with `N_fs` modes; the number of modes is doubled while
+the highest modes of the solution sum to more than `mtol`.
+
+# Keyword arguments
+- `N_gp`: number of grid points in physical space
+- `N_fs`: initial number of Fourier modes used in Newton's method
+- `q`: maximum number of Newton iterations
+- `ctol`: convergence tolerance of Newton's method
+- `mtol`: tolerance on the sum of the highest modes
+- `maxmodes`: maximum number of modes; an `InsufficientModeError` is thrown if
+  more are needed
+
+Return a `NovikovProblem`. Throw a `ConvergenceError` if Newton's method fails.
+"""
 function construct_twsol(
     guess::Vector{ComplexF64},
     c::Float64,

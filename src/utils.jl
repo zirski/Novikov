@@ -1,12 +1,26 @@
 using FFTW, LinearAlgebra, Dates
-# Generates vector of complex values to be applied during derivative calculations. 
+"""
+    kvec(L, N)
+
+Return the spectral differentiation multipliers `2πik/L` for `k = 0:div(N, 2)`,
+matching the output of `rfft` on an `N`-point grid over a period of length `L`.
+"""
 kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
 
-# Computes pth derivative of a function using fft technique and stores result in 
-# du; does not mutate u.
-# u:    function vector to be differentiated
-# du:   stores pth derivative of u
-# uhat: scratch buffer
+"""
+    deriv!(u, du, p, uhat, kvec, plan, iplan)
+
+Compute the `p`th derivative of the periodic function `u` spectrally and store
+it in `du`; `u` is not mutated.
+
+# Arguments
+- `u`: function values to be differentiated
+- `du`: output buffer for the `p`th derivative of `u`
+- `p`: order of the derivative (must be non-negative)
+- `uhat`: complex scratch buffer of the same length as `kvec`
+- `kvec`: differentiation multipliers, see [`kvec`](@ref)
+- `plan`, `iplan`: forward (`rfft`) and inverse (`irfft`) FFT plans
+"""
 @inline function deriv!(
     u::AbstractArray{T},
     du::AbstractArray{T},
@@ -36,6 +50,12 @@ kvec(L::Float64, N::Int64) = [(im * 2 * pi * k) / L for k = 0:div(N, 2)]
     return nothing
 end
 
+"""
+    deriv(u, uhat, p, kvec, plan, iplan)
+
+Allocating version of [`deriv!`](@ref): return the `p`th derivative of `u` as a
+new vector.
+"""
 @inline function deriv(
     u::AbstractArray{T},
     uhat::AbstractArray{S},
@@ -50,16 +70,24 @@ end
     return du
 end
 
-# Vector-valued rk4 (autonomous)
-# Mutates input vector u in-place; 0 allocations
-# f:        Vector-valued vectorized function
-# uhat:     Complex input vector to be integrated
-# u:        scratch buffer for real-valued u
-# uhat_tmp: generic complex scratch buffer
-# dus:      scratch buffer for u derivs
-# ks:       2d array of scratch buffers
-# q:        number of iterations. Not named n to avoid confusion with N (global 
-#           array size).
+"""
+    rk4!(f!, uhat, u, uhat_tmp, dus, t, q, ks, plan, iplan)
+
+Integrate the autonomous system `uhat' = f(uhat)` from time 0 to `t` with `q`
+steps of classical fourth-order Runge-Kutta. `uhat` is updated in place and no
+allocations are made.
+
+# Arguments
+- `f!`: rate function, called as `f!(u, k, u_x, u_xx, u_xxx, plan, iplan)`
+- `uhat`: complex (Fourier-space) state to be integrated, mutated in place
+- `u`: scratch buffer for the real-valued (physical-space) state
+- `uhat_tmp`: generic complex scratch buffer
+- `dus`: `N × 3` scratch buffer for the derivatives of `u`
+- `t`: final time
+- `q`: number of steps (not named `n` to avoid confusion with the array size `N`)
+- `ks`: `length(uhat) × 4` scratch buffer for the Runge-Kutta stages
+- `plan`, `iplan`: forward and inverse FFT plans
+"""
 function rk4!(
     f!::Function,
     uhat::AbstractArray{S},
@@ -102,16 +130,34 @@ function rk4!(
     return nothing
 end
 
+"""
+    dscrt(f, a, L, N)
+
+Sample `f` at `N` equally spaced points on `[a, a + L)`. Return a named tuple
+`(x, y)` of the sample points and the values of `f` at them.
+"""
 function dscrt(f, a, L, N)
     xvec = collect(0:(N-1)) * (L / N) .+ a
     return (x = xvec, y = f.(xvec))
 end
 
+"""
+    dscrt(f, L, N)
+
+Sample `f` at `N` equally spaced points on `[0, L)`. Return a named tuple
+`(x, y)` of the sample points and the values of `f` at them.
+"""
 function dscrt(f, L, N)
     xvec = collect(0:(N-1)) * (L / N)
     return (x = xvec, y = f.(xvec))
 end
 
+"""
+    integrate(u, L, N)
+
+Integrate the periodic function sampled as `u` (`N` points over a period of
+length `L`, right endpoint omitted) with the rectangle rule.
+"""
 function integrate(u, L, N)
     dx = L / N
     # must count first element twice since right endpoint is omitted for Fourier
@@ -122,17 +168,35 @@ function integrate(u, L, N)
     return sum
 end
 
+"""
+    log(msg)
+
+Append `msg` to the log file at `LOG_PATH`, prefixed with the current time.
+"""
 function log(msg)
     open(LOG_PATH, "a") do io
         write(io, string(now()) * ": " * msg * "\n")
     end
 end
 
+"""
+    istw(sol, c, L)
+
+Check whether `sol` is a traveling wave with speed `c` and period `L` by
+evolving it for one period of travel (time `L / c`) and returning the 2-norm of
+the difference between the initial and final states. A result near zero
+indicates a traveling wave.
+"""
 function istw(sol::Vector{Float64}, c::Float64, L::Float64)
     au_f = evolve(sol, L / c, round(1000 * L / c), kvec(L, length(sol)))
     return norm(abs.(sol .- au_f))
 end
 
+"""
+    istw(sol::Union{NovikovProblem,NovikovSolution})
+
+Call `istw(sol.sol, sol.c, sol.L)`.
+"""
 function istw(sol::T) where {T<:Union{NovikovProblem,NovikovSolution}}
     return istw(sol.sol, sol.c, sol.L)
 end

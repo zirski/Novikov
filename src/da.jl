@@ -6,6 +6,13 @@ using LaTeXStrings
 using UUIDs
 
 
+"""
+    extendamp(L_start, L_end, sol_src; num_sols=1000)
+
+Continue the traveling wave `sol_src` in period from `L_start` to `L_end` at
+fixed wave speed, computing `num_sols` solutions, and write them to
+`<L_start>_(<L_end>).txt`.
+"""
 function extendamp(L_start, L_end, sol_src; num_sols = 1000)
     log("Starting period extension---------------------------------")
 
@@ -53,6 +60,15 @@ function extendamp(L_start, L_end, sol_src; num_sols = 1000)
     return nothing
 end
 
+"""
+    amplim(inpath, L; dc=1/4096, max_q=2000, maxmodes=1024)
+
+Find the range of wave speeds (and so amplitudes) of traveling waves with
+period `L` by continuing a seed solution from `inpath` in steps of `dc` in both
+directions, for at most `max_q` steps. Continuation upward stops when more than
+`maxmodes` modes are needed, and downward when the solution becomes trivial or
+Newton's method fails. Solutions are written to `output/ampranges/<L>.txt`.
+"""
 function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
     log("Starting amplitude rangefinding test------------------------- ")
 
@@ -171,11 +187,21 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
     return nothing
 end
 
+"""
+    plot(sol::NovikovSolution; kwargs...)
+
+Plot `sol` over one period.
+"""
 function Plots.plot(sol::NovikovSolution; kwargs...)
     xvec = collect(0:(sol.N-1)) * sol.L / sol.N
     Plots.plot(xvec, sol.sol; kwargs...)
 end
 
+"""
+    plot!(sol::NovikovSolution; kwargs...)
+
+Add `sol` to the current plot, or create a new plot if there is none.
+"""
 function Plots.plot!(sol::NovikovSolution; kwargs...)
     @nospecialize
     xvec = collect(0:(sol.N-1)) * sol.L / sol.N
@@ -188,6 +214,12 @@ function Plots.plot!(sol::NovikovSolution; kwargs...)
     return Plots.plot!(current(), xvec, sol.sol; kwargs...)
 end
 
+"""
+    plotevals(in, res, out)
+
+Scatter-plot every `res`th stored eigenvalue of the solution in `in` in the
+complex plane and save the figure to the `plots` directory.
+"""
 function plotevals(in, res, out)
     evals = getevals(in)
 

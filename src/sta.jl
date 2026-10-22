@@ -2,13 +2,42 @@ using LinearAlgebra
 using Base.Threads
 using FFTW
 
+"""
+    get_uhat(uhat, i, mean)
+
+Return the Fourier coefficient of index `i`: `mean` for `i == 0`, otherwise
+`uhat[abs(i)]`.
+"""
 @inline get_uhat(uhat, i, mean) = i == 0 ? mean : i < 0 ? uhat[-i] : uhat[i]
 
+"""
+    vcoef(k, mu, L)
+
+Wavenumber `2πk/L + mu` of the `k`th mode of a perturbation with Floquet
+parameter `mu`.
+"""
 @inline vcoef(k, mu, L) = 2pi * k / L + mu
+"""
+    ucoef(k, L)
+
+Wavenumber `2πk/L` of the `k`th mode of the base solution.
+"""
 @inline ucoef(k, L) = 2pi * k / L
 
+"""
+    t1(k, uhat, mean, c, L, mu)
+
+Linear (wave-speed) contribution to the diagonal element `k` of the linearized
+operator.
+"""
 @inline t1(k, uhat, mean, c, L, mu) = c * (vcoef(k, mu, L) + vcoef(k, mu, L)^3)
 
+"""
+    t2(k, j, l, uhat, mean, c, L, mu)
+
+Term `j` of the convolution sum contributing to element `(k, l)` of the
+linearized operator.
+"""
 @inline function t2(k, j, l, uhat, mean, c, L, mu)
     return (*(
         +(
@@ -26,6 +55,11 @@ using FFTW
     ))
 end
 
+"""
+    l_element(k, n, N, uhat, mean, c, L, mu)
+
+Compute element `(k, n)` of the linearized operator truncated to modes `-N:N`.
+"""
 function l_element(k, n, N, args...)
     if k == n
         return t1(k, args...) - sum(j -> t2(k, j, n, args...), (-N+k):(N+k))
@@ -37,6 +71,12 @@ function l_element(k, n, N, args...)
     end
 end
 
+"""
+    fill_lmat!(lmat, N, uhat, mean, c, L, mu)
+
+Fill the `(2N + 1) × (2N + 1)` matrix `lmat` with the linearized operator over
+modes `-N:N` (multithreaded over columns).
+"""
 function fill_lmat!(lmat, N, args...)
     @threads for n = (-N):N
         for k = (-N):N
@@ -46,9 +86,14 @@ function fill_lmat!(lmat, N, args...)
 end
 
 """
-    compute_evals(N, uhat, mean, c, L, mu)
+    compute_evals(N, uhat, mean, c, L, mu; evecs=false)
 
-Never use this method. 
+Never use this method; call `compute_evals(sol, mu)` instead.
+
+Compute the spectrum of `M⁻¹L`, the linearization about the solution with
+Fourier coefficients `uhat`, mean `mean`, speed `c` and period `L`, truncated to
+modes `-N:N`, for Floquet parameter `mu`. Return the eigenvalues, or an `Eigen`
+factorization if `evecs` is `true`.
 """
 function compute_evals(N, uhat, mean, c, L, mu; evecs=false)
     args = (uhat, mean, c, L, mu)
@@ -64,10 +109,14 @@ function compute_evals(N, uhat, mean, c, L, mu; evecs=false)
 end
 
 """
-    compute_evals(sol, mu; minmodes=128, mtol=1e-12)
+    compute_evals(sol, mu; minmodes=128, mtol=1e-12, kwargs...)
 
 Compute the eigenvalues of a perturbed solution `sol` to the NE with the Floquet
 parameter `mu`.
+
+The number of modes is halved (down to `minmodes`) while the highest modes sum
+to less than `mtol`. Remaining keyword arguments (e.g. `evecs`) are passed to
+the low-level method.
 """
 function compute_evals(
     sol::NovikovSolution,
