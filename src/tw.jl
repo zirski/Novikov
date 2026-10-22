@@ -34,7 +34,7 @@ import Base: isless
 )
 
 @inline function get_fhat(arr, i, mean)
-    i == 0 ? mean : i < 0 ? arr[-i] : arr[i]
+    i == 0 ? mean : i < 0 ? conj(arr[-i]) : arr[i]
 end
 
 @inline function check_combos(testcombo, combos)
