@@ -1,5 +1,13 @@
 using FFTW, LinearAlgebra
 
+"""
+    evolve(u, t_f, q, kvec)
+
+Evolve the initial data `u` under the Novikov equation up to time `t_f` with a
+pseudospectral RK4 scheme of `q` steps, and return the solution at `t_f`.
+`kvec` holds the differentiation multipliers for the grid of `u`; see
+[`kvec`](@ref).
+"""
 function evolve(
     u::AbstractVector{R},
     t_f::Real,

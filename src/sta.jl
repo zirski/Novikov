@@ -2,17 +2,46 @@ using LinearAlgebra
 using Base.Threads
 using FFTW
 
-# U is real, so Û(-i) = conj(Û(i))
+"""
+    get_uhat(uhat, i, mean)
+
+Return the Fourier coefficient of index `i`: `mean` for `i == 0`, `uhat[i]` for
+`i > 0`, and `conj(uhat[-i])` for `i < 0` (U is real, so Û(-i) = conj(Û(i))).
+"""
 @inline get_uhat(uhat, i, mean) = i == 0 ? mean : i < 0 ? conj(uhat[-i]) : uhat[i]
 
+"""
+    vcoef(k, mu, L)
+
+Wavenumber `2πk/L + mu` of the `k`th mode of a perturbation with Floquet
+parameter `mu`.
+"""
 @inline vcoef(k, mu, L) = 2pi * k / L + mu
+"""
+    ucoef(k, L)
+
+Wavenumber `2πk/L` of the `k`th mode of the base solution.
+"""
 @inline ucoef(k, L) = 2pi * k / L
 
+"""
+    t1(k, uhat, mean, c, L, mu)
+
+Linear (wave-speed) contribution to the diagonal element `k` of the linearized
+operator.
+"""
 @inline t1(k, uhat, mean, c, L, mu) = c * (vcoef(k, mu, L) + vcoef(k, mu, L)^3)
 
-# Every T2 sum over j is a convolution in a = k - j, b = j - l with a + b = k - l,
-# so the sums depend only on p = k - l (see notes/latex/fast_assembly.tex).
-# Returns a (4N + 1) x 5 array whose row p + 2N + 1 holds S0, S1, S2, S3, S12 at p.
+"""
+    conv_sums(N, uhat, mean, L)
+
+Precompute the convolution sums of the T2 terms of the linearized operator.
+
+Every T2 sum over j is a convolution in a = k - j, b = j - l with a + b = k - l,
+so the sums depend only on p = k - l (see notes/latex/fast_assembly.tex).
+Return a `(4N + 1) × 5` array whose row `p + 2N + 1` holds S0, S1, S2, S3, S12
+at `p`.
+"""
 function conv_sums(N, uhat, mean, L)
     S = zeros(ComplexF64, 4N + 1, 5)
     @threads for p = (-2N):(2N)
@@ -31,6 +60,13 @@ function conv_sums(N, uhat, mean, L)
     return S
 end
 
+"""
+    fill_lmat!(lmat, N, uhat, mean, c, L, mu)
+
+Fill the `(2N + 1) × (2N + 1)` matrix `lmat` with the linearized operator over
+modes `-N:N`, built from the precomputed sums of [`conv_sums`](@ref)
+(multithreaded over columns).
+"""
 function fill_lmat!(lmat, N, uhat, mean, c, L, mu)
     S = conv_sums(N, uhat, mean, L)
     @threads for n = (-N):N
@@ -50,9 +86,14 @@ function fill_lmat!(lmat, N, uhat, mean, c, L, mu)
 end
 
 """
-    compute_evals(N, uhat, mean, c, L, mu)
+    compute_evals(N, uhat, mean, c, L, mu; evecs=false)
 
-Never use this method. 
+Never use this method; call `compute_evals(sol, mu)` instead.
+
+Compute the spectrum of `M⁻¹L`, the linearization about the solution with
+Fourier coefficients `uhat`, mean `mean`, speed `c` and period `L`, truncated to
+modes `-N:N`, for Floquet parameter `mu`. Return the eigenvalues, or an `Eigen`
+factorization if `evecs` is `true`.
 """
 function compute_evals(N, uhat, mean, c, L, mu; evecs=false)
     args = (uhat, mean, c, L, mu)

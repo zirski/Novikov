@@ -2,6 +2,12 @@ using UUIDs
 using Printf
 using FFTW: LinearAlgebra
 
+"""
+    writesols(filename, sols, ow=false)
+
+Append each solution in `sols` to `filename` (relative to the active project
+directory); see [`writesol`](@ref). Delete the file first if `ow` is `true`.
+"""
 function writesols(filename, sols::Vector{NovikovSolution}, ow = false)
     path = joinpath(dirname(Base.active_project()), filename)
     ow && rm(path, force = true)
@@ -11,6 +17,12 @@ function writesols(filename, sols::Vector{NovikovSolution}, ow = false)
     return nothing
 end
 
+"""
+    writesol(filename, sol)
+
+Append `sol` to `filename` (relative to the active project directory) as one
+tab-separated line: `id`, `c`, `L`, `H`, then the solution values.
+"""
 function writesol(filename, sol::NovikovSolution)
     path = joinpath(dirname(Base.active_project()), filename)
     open(path, "a") do io
@@ -21,6 +33,13 @@ function writesol(filename, sol::NovikovSolution)
     return nothing
 end
 
+"""
+    readsols(filename)
+
+Read all solutions from `filename` (relative to the active project directory),
+in the format written by [`writesol`](@ref), and return them as a
+`Vector{NovikovSolution}`.
+"""
 function readsols(filename)
     path = joinpath(dirname(Base.active_project()), filename)
     open(path, "r") do io
@@ -43,6 +62,12 @@ function readsols(filename)
     end
 end
 
+"""
+    sortsols(filename, ow=false)
+
+Read the solutions in `filename` and return them sorted by wave speed. If `ow`
+is `true`, overwrite the file with the sorted solutions.
+"""
 function sortsols(filename, ow::Bool=false)
     sols = readsols(filename)
     sort!(sols)
@@ -50,6 +75,13 @@ function sortsols(filename, ow::Bool=false)
     return sols
 end
 
+"""
+    getsol(filename, by::Symbol, val)
+
+Return the unique solution in `filename` whose field `by` (e.g. `:c`, `:L`,
+`:H`) is closest to `val`, adjusting the matching tolerance until exactly one
+solution matches. Throw an `ArgumentError` if none or too many match.
+"""
 function getsol(filename, by::Symbol, val)
     by == :id && throw(ArgumentError("Can't search by id; are you insane?"))
     tol = 1e-4
@@ -71,6 +103,11 @@ function getsol(filename, by::Symbol, val)
     return sols[only(idx)]
 end
 
+"""
+    getsol(filename)
+
+Return the solution in `filename`, which must contain exactly one.
+"""
 function getsol(filename)
     try
         return only(readsols(filename))
@@ -83,8 +120,21 @@ function getsol(filename)
     end
 end
 
+"""
+    getsol(filename, idx)
+
+Return the `idx`th solution in `filename` after sorting by wave speed; `idx`
+may be `:end` for the last.
+"""
 getsol(filename, idx) = sortsols(filename, false)[idx == :end ? end : idx]
 
+"""
+    write_evals(filepath, sol, n_pts)
+
+Compute the eigenvalues of the linearization about `sol` for `n_pts` Floquet
+parameters in `[-π/L, π/L]` and write them to `filepath`: the solution's UUID on
+the first line, then one tab-separated real and imaginary part per line.
+"""
 function write_evals(filepath, sol::NovikovSolution, n_pts)
     evals = []
 
@@ -107,6 +157,12 @@ function write_evals(filepath, sol::NovikovSolution, n_pts)
     end
 end
 
+"""
+    write_eigen(filepath, sol, n_pts)
+
+Like [`write_evals`](@ref), but also write each eigenvector, tab-separated after
+its eigenvalue.
+"""
 function write_eigen(filepath, sol::NovikovSolution, n_pts)
     evals = []
     evecs = []
@@ -141,6 +197,12 @@ function write_eigen(filepath, sol::NovikovSolution, n_pts)
 
 end
 
+"""
+    write_evals(sol, n_pts)
+
+Write the eigenvalues of `sol` to `output/evals/<c>_<L>.txt` in the active
+project directory.
+"""
 function write_evals(sol::NovikovSolution, n_pts)
     filename = @sprintf "%.4f_%.4f.txt" sol.c sol.L
     filepath = joinpath(dirname(Base.active_project()), "output/evals", filename)
@@ -150,10 +212,21 @@ function write_evals(sol::NovikovSolution, n_pts)
 end
 
 
+"""
+    getevals(filename)
+
+Return the stored eigenvalues of the single solution in `filename`.
+"""
 function getevals(filename)
     return getevals(getsol(filename))
 end
 
+"""
+    getevals(sol::NovikovSolution)
+
+Return the stored eigenvalues of `sol`, found by its UUID among the files in
+the eigenvalue output directory.
+"""
 function getevals(sol::NovikovSolution)
     eval_files = Dict{UUID,String}()
     dirpath = "/Users/tobyhammond/research/NovikovSolver/output/evals/"
@@ -176,6 +249,12 @@ function getevals(sol::NovikovSolution)
     end
 end
 
+"""
+    geteigen(filename)
+
+Read the eigenvalue-eigenvector pairs written by [`write_eigen`](@ref) from
+`filename` and return them as a vector of `(eval, evec)` tuples.
+"""
 function geteigen(filename)
     open(filename, "r") do file
         readline(file)
