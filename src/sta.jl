@@ -5,10 +5,10 @@ using FFTW
 """
     get_uhat(uhat, i, mean)
 
-Return the Fourier coefficient of index `i`: `mean` for `i == 0`, otherwise
-`uhat[abs(i)]`.
+Return the Fourier coefficient of index `i`: `mean` for `i == 0`, `uhat[i]` for
+`i > 0`, and `conj(uhat[-i])` for `i < 0` (U is real, so Û(-i) = conj(Û(i))).
 """
-@inline get_uhat(uhat, i, mean) = i == 0 ? mean : i < 0 ? uhat[-i] : uhat[i]
+@inline get_uhat(uhat, i, mean) = i == 0 ? mean : i < 0 ? conj(uhat[-i]) : uhat[i]
 
 """
     vcoef(k, mu, L)
@@ -106,14 +106,12 @@ function compute_evals(N, uhat, mean, c, L, mu; evecs=false)
 end
 
 """
-    compute_evals(sol, mu; minmodes=128, mtol=1e-12, kwargs...)
+    compute_evals(sol, mu; minmodes=128, mtol=1e-12, evecs=false)
 
 Compute the eigenvalues of a perturbed solution `sol` to the NE with the Floquet
-parameter `mu`.
-
-The number of modes is halved (down to `minmodes`) while the highest modes sum
-to less than `mtol`. Remaining keyword arguments (e.g. `evecs`) are passed to
-the low-level method.
+parameter `mu`. Fourier modes of `sol` are halved away while every discarded
+coefficient is below `mtol`, keeping at least `minmodes` modes. With
+`evecs=true`, return the `Eigen` factorization instead of only the eigenvalues.
 """
 function compute_evals(
     sol::NovikovSolution,
@@ -132,9 +130,17 @@ function compute_evals(
         ArgumentError("input solution has an inappropriate number of modes"),
     )
 
-    while maxmode > minmodes && abs(real(sum(uhat[(maxmode-10):maxmode]))) < mtol
-        maxmode = div(maxmode, 2) + 1
+    # only halve if every mode being discarded is negligible, and never go below
+    # minmodes
+    while true
+        newmax = div(maxmode, 2) + 1
+        (newmax - 1 < minmodes || maximum(abs, uhat[(newmax+1):maxmode]) >= mtol) &&
+            break
+        maxmode = newmax
     end
+
+    # never use the Nyquist coefficient; it would be counted as both Û(N) and Û(-N)
+    maxmode == length(uhat) && (maxmode -= 1)
 
     log(
         "initiating eval computation with " *
@@ -142,7 +148,7 @@ function compute_evals(
             " unique modes",
     )
     return compute_evals(
-        maxmode,
+        maxmode - 1,
         uhat[2:maxmode],
         mean,
         sol.c,
