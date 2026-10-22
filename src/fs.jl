@@ -133,7 +133,7 @@ getsol(filename, idx) = sortsols(filename, false)[idx == :end ? end : idx]
 
 Compute the eigenvalues of the linearization about `sol` for `n_pts` Floquet
 parameters in `[-π/L, π/L]` and write them to `filepath`: the solution's UUID on
-the first line, then one tab-separated real and imaginary part per line.
+the first line, then one eigenvalue per line as printed by Julia (`x + yim`).
 """
 function write_evals(filepath, sol::NovikovSolution, n_pts)
     evals = []
@@ -150,9 +150,9 @@ function write_evals(filepath, sol::NovikovSolution, n_pts)
     open(filepath, "a") do file
         println(file, sol.id)
         for eval in evals
-            println(file, real(eval), '\t', imag(eval))
+            println(file, eval)
         end
-        println("Wrote eigenvalues to ", filepath, ".")
+        println("Wrote ", length(evals), " eigenvalues to ", filepath, ".")
         return nothing
     end
 end
@@ -182,14 +182,7 @@ function write_eigen(filepath, sol::NovikovSolution, n_pts)
     open(filepath, "a") do file
         println(file, sol.id)
         for (eval, evec) in zip(evals, eachrow(evecs))
-            println(
-                file,
-                real(eval),
-                '\t',
-                imag(eval),
-                '\t',
-                join(vec(evec), '\t'),
-            )
+            println(file, eval, '\t', join(vec(evec), '\t'))
         end
         println("Wrote eigenvalues and eigenvectors to ", filepath, ".")
         return nothing
@@ -236,16 +229,10 @@ function getevals(sol::NovikovSolution)
     end
 
     open(joinpath(dirpath, eval_files[sol.id]), "r") do file
-        evals = Vector{ComplexF64}(undef, countlines(file))
-        seekstart(file)
         readline(file)
-
-        for (i, line) in enumerate(eachline(file))
-            real, imag = parse.(Float64, split(line, '\t'))
-            evals[i] = Complex(real, imag)
-        end
-
-        return evals
+        # Julia prints non-finite imaginary parts as e.g. "NaN*im", which parse
+        # can't read; "NaNim" parses fine
+        return [parse(ComplexF64, replace(line, "*" => "")) for line in eachline(file)]
     end
 end
 
@@ -261,13 +248,9 @@ function geteigen(filename)
         epairs = []
 
         for line in eachline(file)
-            elements = split(line, '\t')
-            eval = Complex(
-                parse(Float64, popfirst!(elements)),
-                parse(Float64, popfirst!(elements)),
-            )
-            evec = parse.(ComplexF64, elements)
-            push!(epairs, (eval, evec))
+            # see getevals for why "*" is stripped
+            elements = parse.(ComplexF64, split(replace(line, "*" => ""), '\t'))
+            push!(epairs, (popfirst!(elements), elements))
         end
         return epairs
     end
