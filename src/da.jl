@@ -10,31 +10,28 @@ using UUIDs
     extendamp(L_start, L_end, sol_src; num_sols=1000)
 
 Continue the traveling wave `sol_src` in period from `L_start` to `L_end` at
-fixed wave speed, computing `num_sols` solutions, and write them to
-`<L_start>_(<L_end>).txt`.
+fixed wave speed, computing `num_sols` solutions (including `sol_src`), and
+write them to `output/pextn/<L_start>_<L_end>.txt`, replacing any existing file.
 """
 function extendamp(L_start, L_end, sol_src; num_sols = 1000)
     log("Starting period extension---------------------------------")
 
-    Lrange = collect(range(L_start, L_end, num_sols))
+    outpath = "output/pextn/$(L_start)_$(L_end).txt"
+
+    Lrange = range(L_start, L_end, num_sols)
     sols = Vector{NovikovSolution}(undef, 0)
-
     push!(sols, sol_src)
-    prob = construct_twsol(
-        rfft(sol_src) / sol_src.N,
-        sol_src.c,
-        Lrange[2],
-        N_gp = sol_src.N,
-    )
-    sol = NovikovSolution(uuid4(), sol_src.c, L_start, prob.H, prob.sol, sol_src.N)
-    push!(sols, sol)
 
-    iter = tqdm(Lrange[3:end])
+    # Fourier coefficients of the last solution found, used as the initial
+    # guess for the next one
+    guess = rfft(sol_src.sol) / sol_src.N
+
+    iter = tqdm(Lrange[2:end])
     for L in iter
         try
-            prob = construct_twsol(prob.sol_hat, sol_src.c, L, N_gp = sol_src.N)
-            sol = NovikovSolution(uuid4(), sol_src.c, L, prob.H, prob.sol, sol_src.N)
-            push!(sols, prob.sol)
+            prob = construct_twsol(guess, sol_src.c, L, N_gp = sol_src.N)
+            guess = prob.sol_hat
+            push!(sols, NovikovSolution(prob))
             set_postfix(iter, Lines = L)
         catch e
             if e isa ConvergenceError
@@ -49,7 +46,7 @@ function extendamp(L_start, L_end, sol_src; num_sols = 1000)
         end
     end
 
-    writesols("$(L_start)_($L_end).txt", sols)
+    writesols(outpath, sols, true)
 
     log(
         "Test completed; wrote " *
