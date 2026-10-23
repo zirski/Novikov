@@ -7,48 +7,43 @@ using UUIDs
 
 
 """
-    extendamp(L_start, L_end, sol_src; num_sols=1000)
+    extendpd(L_start, L_end, sol_src; num_sols=1000, c_end=sol_src.c)
 
-Continue the traveling wave `sol_src` in period from `L_start` to `L_end` at
-fixed wave speed, computing `num_sols` solutions, and write them to
-`<L_start>_(<L_end>).txt`.
+Continue the traveling wave `sol_src` in period from `L_start` to `L_end`,
+computing `num_sols` solutions (including `sol_src`), and write them to
+`output/pextn/<L_start>_<L_end>.txt` (periods to 4 decimal places), replacing
+any existing file.
+
+The wave speed moves linearly from `sol_src.c` to `c_end` alongside the period.
+Shrinking the period at fixed speed makes the waves increasingly peaked, so
+lower `c_end` to keep them smooth; the default keeps the speed fixed.
 """
-function extendamp(L_start, L_end, sol_src; num_sols=1000)
+function extendpd(L_start, L_end, sol_src; num_sols=1000, c_end=sol_src.c)
     log("Starting period extension---------------------------------")
 
-    Lrange = collect(range(L_start, L_end, num_sols))
+    outpath = @sprintf "output/pextn/%.4f_%.4f.txt" L_start L_end
+
+    Lrange = range(L_start, L_end, num_sols)
+    crange = range(sol_src.c, c_end, num_sols)
     sols = Vector{NovikovSolution}(undef, 0)
-
     push!(sols, sol_src)
-    prob = construct_twsol(
-        rfft(sol_src) / sol_src.N,
-        sol_src.c,
-        Lrange[2],
-        N_gp=sol_src.N,
-    )
-    sol =
-        NovikovSolution(uuid4(), sol_src.c, L_start, prob.H, prob.sol, sol_src.N)
-    push!(sols, sol)
 
-    iter = tqdm(Lrange[3:end])
-    for L in iter
+    # Fourier coefficients of the last solution found, used as the initial
+    # guess for the next one
+    guess = rfft(sol_src.sol) / sol_src.N
+
+    iter = tqdm(zip(Lrange[2:end], crange[2:end]))
+    for (i, (L, c)) in enumerate(iter)
         try
-            prob = construct_twsol(prob.sol_hat, sol_src.c, L, N_gp=sol_src.N)
-            sol = NovikovSolution(
-                uuid4(),
-                sol_src.c,
-                L,
-                prob.H,
-                prob.sol,
-                sol_src.N
-            )
-            push!(sols, prob.sol)
-            set_postfix(iter, Lines=L)
+            prob = construct_twsol(guess, c, L, N_gp=sol_src.N)
+            guess = prob.sol_hat
+            push!(sols, NovikovSolution(prob))
+            set_postfix(iter, Lines=i)
         catch e
             if e isa ConvergenceError
                 throw(
                     ArgumentError(
-                        "Specified source solution cannot be extended; try one with a smaller amplitude",
+                        "Specified source solution cannot be extended; try one with a smaller amplitude or a lower c_end",
                     ),
                 )
             else
@@ -57,7 +52,7 @@ function extendamp(L_start, L_end, sol_src; num_sols=1000)
         end
     end
 
-    writesols("$(L_start)_($L_end).txt", sols)
+    writesols(outpath, sols, true)
 
     log(
         "Test completed; wrote " *
@@ -75,12 +70,13 @@ Find the range of wave speeds (and so amplitudes) of traveling waves with
 period `L` by continuing a seed solution from `inpath` in steps of `dc` in both
 directions, for at most `max_q` steps. Continuation upward stops when more than
 `maxmodes` modes are needed, and downward when the solution becomes trivial or
-Newton's method fails. Solutions are written to `output/ampranges/<L>.txt`.
+Newton's method fails. Solutions are written to `output/ampranges/<L>.txt`
+(`L` to 4 decimal places).
 """
 function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
     log("Starting amplitude rangefinding test------------------------- ")
 
-    outpath = "output/ampranges/" * string(L) * ".txt"
+    outpath = @sprintf "output/ampranges/%.4f.txt" L
 
     local seedsol
     try
@@ -95,27 +91,15 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
 
     lines_written = 1
 
-    sols = Vector{Vector{Float64}}(undef, 0)
+    sols = Vector{NovikovSolution}(undef, 0)
     push!(sols, seedsol)
-    cs = Vector{Float64}(undef, 0)
 
     c_inc = seedsol.c + dc
     c_dec = seedsol.c - dc
 
-    prob_inc = construct_twsol(
-        rfft(seedsol.sol) / seedsol.N,
-        c_inc,
-        L,
-        N_gp=seedsol.N,
-        maxmodes=maxmodes,
-    )
-    prob_dec = construct_twsol(
-        rfft(seedsol.sol) / seedsol.N,
-        c_dec,
-        L,
-        N_gp=seedsol.N,
-        maxmodes=maxmodes,
-    )
+    # Fourier coefficients of the last solution found in each direction, used
+    # as the initial guess for the next one
+    guess_inc = guess_dec = rfft(seedsol.sol) / seedsol.N
 
     inc_lim = false
     dec_lim = false
@@ -125,23 +109,23 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
         if !inc_lim
             try
                 prob_inc = construct_twsol(
-                    prob_inc.sol_hat,
+                    guess_inc,
                     c_inc,
                     L,
                     N_gp=seedsol.N,
                     maxmodes=maxmodes,
                 )
 
-                push!(sols, prob_inc.sol)
-                push!(cs, c_inc)
+                guess_inc = prob_inc.sol_hat
+                push!(sols, NovikovSolution(prob_inc))
                 c_inc += dc
                 lines_written += 1
             catch e
                 if e isa InsufficientModeError
                     log(
-                        "upper limit reached for " *
-                            string(seedsol.N) *
-                            " modes. ",
+                        "upper limit reached; more than " *
+                            string(maxmodes) *
+                            " modes needed. ",
                     )
                     inc_lim = true
                 else
@@ -153,7 +137,7 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
         if !dec_lim
             try
                 prob_dec = construct_twsol(
-                    prob_dec.sol_hat,
+                    guess_dec,
                     c_dec,
                     L,
                     N_gp=seedsol.N,
@@ -164,8 +148,8 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
                     dec_lim = true
                     log("lower limit reached; i = " * string(i))
                 else
-                    pushfirst!(sols, prob_dec.sol)
-                    pushfirst!(cs, c_dec)
+                    guess_dec = prob_dec.sol_hat
+                    pushfirst!(sols, NovikovSolution(prob_dec))
                     c_dec -= dc
                     lines_written += 1
                 end
@@ -186,6 +170,8 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
         inc_lim && dec_lim && break
         set_postfix(iter, Lines=lines_written)
     end
+    # write whatever was found since the last chunk
+    writesols(outpath, sols, true)
     log(
         "Test completed; wrote " *
             string(lines_written) *
