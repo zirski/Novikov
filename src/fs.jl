@@ -232,7 +232,9 @@ function getevals(sol::NovikovSolution)
         readline(file)
         # Julia prints non-finite imaginary parts as e.g. "NaN*im", which parse
         # can't read; "NaNim" parses fine
-        return [parse(ComplexF64, replace(line, "*" => "")) for line in eachline(file)]
+        return [
+            parse(ComplexF64, replace(line, "*" => "")) for line in eachline(file)
+        ]
     end
 end
 

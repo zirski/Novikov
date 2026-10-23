@@ -197,6 +197,4 @@ end
 
 Call `istw(sol.sol, sol.c, sol.L)`.
 """
-function istw(sol::T) where {T<:Union{NovikovProblem,NovikovSolution}}
-    return istw(sol.sol, sol.c, sol.L)
-end
+istw(sol::Union{NovikovProblem,NovikovSolution}) = istw(sol.sol, sol.c, sol.L)

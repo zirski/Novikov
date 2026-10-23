@@ -33,12 +33,12 @@ function extendpd(L_start, L_end, sol_src; num_sols=1000, c_end=sol_src.c)
     guess = rfft(sol_src.sol) / sol_src.N
 
     iter = tqdm(zip(Lrange[2:end], crange[2:end]))
-    for (L, c) in iter
+    for (i, (L, c)) in enumerate(iter)
         try
             prob = construct_twsol(guess, c, L, N_gp=sol_src.N)
             guess = prob.sol_hat
             push!(sols, NovikovSolution(prob))
-            set_postfix(iter, Lines=L)
+            set_postfix(iter, Lines=i)
         catch e
             if e isa ConvergenceError
                 throw(
