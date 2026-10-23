@@ -87,27 +87,15 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
 
     lines_written = 1
 
-    sols = Vector{Vector{Float64}}(undef, 0)
+    sols = Vector{NovikovSolution}(undef, 0)
     push!(sols, seedsol)
-    cs = Vector{Float64}(undef, 0)
 
     c_inc = seedsol.c + dc
     c_dec = seedsol.c - dc
 
-    prob_inc = construct_twsol(
-        rfft(seedsol.sol) / seedsol.N,
-        c_inc,
-        L,
-        N_gp = seedsol.N,
-        maxmodes = maxmodes,
-    )
-    prob_dec = construct_twsol(
-        rfft(seedsol.sol) / seedsol.N,
-        c_dec,
-        L,
-        N_gp = seedsol.N,
-        maxmodes = maxmodes,
-    )
+    # Fourier coefficients of the last solution found in each direction, used
+    # as the initial guess for the next one
+    guess_inc = guess_dec = rfft(seedsol.sol) / seedsol.N
 
     inc_lim = false
     dec_lim = false
@@ -117,23 +105,23 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
         if !inc_lim
             try
                 prob_inc = construct_twsol(
-                    prob_inc.sol_hat,
+                    guess_inc,
                     c_inc,
                     L,
                     N_gp = seedsol.N,
                     maxmodes = maxmodes,
                 )
 
-                push!(sols, prob_inc.sol)
-                push!(cs, c_inc)
+                guess_inc = prob_inc.sol_hat
+                push!(sols, NovikovSolution(prob_inc))
                 c_inc += dc
                 lines_written += 1
             catch e
                 if e isa InsufficientModeError
                     log(
-                        "upper limit reached for " *
-                        string(seedsol.N) *
-                        " modes. ",
+                        "upper limit reached; more than " *
+                        string(maxmodes) *
+                        " modes needed. ",
                     )
                     inc_lim = true
                 else
@@ -145,7 +133,7 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
         if !dec_lim
             try
                 prob_dec = construct_twsol(
-                    prob_dec.sol_hat,
+                    guess_dec,
                     c_dec,
                     L,
                     N_gp = seedsol.N,
@@ -156,8 +144,8 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
                     dec_lim = true
                     log("lower limit reached; i = " * string(i))
                 else
-                    pushfirst!(sols, prob_dec.sol)
-                    pushfirst!(cs, c_dec)
+                    guess_dec = prob_dec.sol_hat
+                    pushfirst!(sols, NovikovSolution(prob_dec))
                     c_dec -= dc
                     lines_written += 1
                 end
@@ -178,6 +166,8 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
         inc_lim && dec_lim && break
         set_postfix(iter, Lines = lines_written)
     end
+    # write whatever was found since the last chunk
+    writesols(outpath, sols, true)
     log(
         "Test completed; wrote " *
         string(lines_written) *
