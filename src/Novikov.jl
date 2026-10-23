@@ -33,7 +33,7 @@ export
     resize,
 
     # data analysis
-    extendamp,
+    extendpd,
     amplim,
     istw,
     compute_evals,
