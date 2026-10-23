@@ -13,7 +13,7 @@ Continue the traveling wave `sol_src` in period from `L_start` to `L_end` at
 fixed wave speed, computing `num_sols` solutions, and write them to
 `<L_start>_(<L_end>).txt`.
 """
-function extendamp(L_start, L_end, sol_src; num_sols = 1000)
+function extendamp(L_start, L_end, sol_src; num_sols=1000)
     log("Starting period extension---------------------------------")
 
     Lrange = collect(range(L_start, L_end, num_sols))
@@ -24,18 +24,26 @@ function extendamp(L_start, L_end, sol_src; num_sols = 1000)
         rfft(sol_src) / sol_src.N,
         sol_src.c,
         Lrange[2],
-        N_gp = sol_src.N,
+        N_gp=sol_src.N,
     )
-    sol = NovikovSolution(uuid4(), sol_src.c, L_start, prob.H, prob.sol, sol_src.N)
+    sol =
+        NovikovSolution(uuid4(), sol_src.c, L_start, prob.H, prob.sol, sol_src.N)
     push!(sols, sol)
 
     iter = tqdm(Lrange[3:end])
     for L in iter
         try
-            prob = construct_twsol(prob.sol_hat, sol_src.c, L, N_gp = sol_src.N)
-            sol = NovikovSolution(uuid4(), sol_src.c, L, prob.H, prob.sol, sol_src.N)
+            prob = construct_twsol(prob.sol_hat, sol_src.c, L, N_gp=sol_src.N)
+            sol = NovikovSolution(
+                uuid4(),
+                sol_src.c,
+                L,
+                prob.H,
+                prob.sol,
+                sol_src.N
+            )
             push!(sols, prob.sol)
-            set_postfix(iter, Lines = L)
+            set_postfix(iter, Lines=L)
         catch e
             if e isa ConvergenceError
                 throw(
@@ -53,9 +61,9 @@ function extendamp(L_start, L_end, sol_src; num_sols = 1000)
 
     log(
         "Test completed; wrote " *
-        string(num_sols) *
-        " lines to " *
-        string(outpath),
+            string(num_sols) *
+            " lines to " *
+            string(outpath),
     )
     return nothing
 end
@@ -69,7 +77,7 @@ directions, for at most `max_q` steps. Continuation upward stops when more than
 `maxmodes` modes are needed, and downward when the solution becomes trivial or
 Newton's method fails. Solutions are written to `output/ampranges/<L>.txt`.
 """
-function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
+function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
     log("Starting amplitude rangefinding test------------------------- ")
 
     outpath = "output/ampranges/" * string(L) * ".txt"
@@ -98,15 +106,15 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
         rfft(seedsol.sol) / seedsol.N,
         c_inc,
         L,
-        N_gp = seedsol.N,
-        maxmodes = maxmodes,
+        N_gp=seedsol.N,
+        maxmodes=maxmodes,
     )
     prob_dec = construct_twsol(
         rfft(seedsol.sol) / seedsol.N,
         c_dec,
         L,
-        N_gp = seedsol.N,
-        maxmodes = maxmodes,
+        N_gp=seedsol.N,
+        maxmodes=maxmodes,
     )
 
     inc_lim = false
@@ -120,8 +128,8 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
                     prob_inc.sol_hat,
                     c_inc,
                     L,
-                    N_gp = seedsol.N,
-                    maxmodes = maxmodes,
+                    N_gp=seedsol.N,
+                    maxmodes=maxmodes,
                 )
 
                 push!(sols, prob_inc.sol)
@@ -132,8 +140,8 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
                 if e isa InsufficientModeError
                     log(
                         "upper limit reached for " *
-                        string(seedsol.N) *
-                        " modes. ",
+                            string(seedsol.N) *
+                            " modes. ",
                     )
                     inc_lim = true
                 else
@@ -148,11 +156,11 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
                     prob_dec.sol_hat,
                     c_dec,
                     L,
-                    N_gp = seedsol.N,
-                    maxmodes = maxmodes,
+                    N_gp=seedsol.N,
+                    maxmodes=maxmodes,
                 )
 
-                if isapprox(prob_dec.sol_hat[2], 0, atol = 1e-15)
+                if isapprox(prob_dec.sol_hat[2], 0, atol=1e-15)
                     dec_lim = true
                     log("lower limit reached; i = " * string(i))
                 else
@@ -176,13 +184,13 @@ function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
             writesols(outpath, sols, true)
         end
         inc_lim && dec_lim && break
-        set_postfix(iter, Lines = lines_written)
+        set_postfix(iter, Lines=lines_written)
     end
     log(
         "Test completed; wrote " *
-        string(lines_written) *
-        " lines to " *
-        string(outpath),
+            string(lines_written) *
+            " lines to " *
+            string(outpath),
     )
     return nothing
 end
@@ -226,12 +234,27 @@ function plotevals(in, res, out)
     Plots.plot(
         real(evals[1:res:end]),
         imag(evals[1:res:end]),
-        seriestype = :scatter,
-        label = "",
-        fontfamily = "Computer Modern",
-        xlabel = L"\Re~(\lambda)",
-        ylabel = L"\Im~(\lambda)",
+        seriestype=:scatter,
+        label="",
+        fontfamily="Computer Modern",
+        xlabel=L"\Re~(\lambda)",
+        ylabel=L"\Im~(\lambda)",
     )
     Plots.savefig(joinpath(dirname(Base.active_project()), "plots", pname))
     return nothing
+end
+
+function plotevals(sol)
+    evals = getevals(sol)
+    display(
+        Plots.plot(
+            real(evals),
+            imag(evals),
+            seriestype=:scatter,
+            label="",
+            ms=1
+        )
+    )
+    return nothing
+
 end

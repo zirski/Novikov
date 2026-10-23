@@ -1,0 +1,5 @@
+style = "minimal"
+
+[options]
+margin = 82
+whitespace_in_kwargs = false
