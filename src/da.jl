@@ -11,12 +11,13 @@ using UUIDs
 
 Continue the traveling wave `sol_src` in period from `L_start` to `L_end` at
 fixed wave speed, computing `num_sols` solutions (including `sol_src`), and
-write them to `output/pextn/<L_start>_<L_end>.txt`, replacing any existing file.
+write them to `output/pextn/<L_start>_<L_end>.txt` (periods to 4 decimal
+places), replacing any existing file.
 """
 function extendamp(L_start, L_end, sol_src; num_sols = 1000)
     log("Starting period extension---------------------------------")
 
-    outpath = "output/pextn/$(L_start)_$(L_end).txt"
+    outpath = @sprintf "output/pextn/%.4f_%.4f.txt" L_start L_end
 
     Lrange = range(L_start, L_end, num_sols)
     sols = Vector{NovikovSolution}(undef, 0)
@@ -64,12 +65,13 @@ Find the range of wave speeds (and so amplitudes) of traveling waves with
 period `L` by continuing a seed solution from `inpath` in steps of `dc` in both
 directions, for at most `max_q` steps. Continuation upward stops when more than
 `maxmodes` modes are needed, and downward when the solution becomes trivial or
-Newton's method fails. Solutions are written to `output/ampranges/<L>.txt`.
+Newton's method fails. Solutions are written to `output/ampranges/<L>.txt`
+(`L` to 4 decimal places).
 """
 function amplim(inpath, L; dc = 1 / 4096, max_q = 2000, maxmodes = 1024)
     log("Starting amplitude rangefinding test------------------------- ")
 
-    outpath = "output/ampranges/" * string(L) * ".txt"
+    outpath = @sprintf "output/ampranges/%.4f.txt" L
 
     local seedsol
     try
