@@ -63,31 +63,66 @@ function extendpd(L_start, L_end, sol_src; num_sols=1000, c_end=sol_src.c)
     return nothing
 end
 
-"""
-    amplim(inpath, L; dc=1/4096, max_q=2000, maxmodes=1024)
+function extendmean(meanstart, meanend, solsrc; num_sols=1000, c_end=solsrc.c)
+    log("Starting mean extension---------------------------------")
 
-Find the range of wave speeds (and so amplitudes) of traveling waves with
-period `L` by continuing a seed solution from `inpath` in steps of `dc` in both
+    outpath = @sprintf "output/mextn/%.4f_%.4f.txt" meanstart meanend
+
+    mrange = range(meanstart, meanend, num_sols)
+    crange = range(solsrc.c, c_end, num_sols)
+    sols = Vector{NovikovSolution}(undef, 0)
+    push!(sols, solsrc)
+
+    # Fourier coefficients of the last solution found, used as the initial
+    # guess for the next one
+    guess = rfft(solsrc.sol) / solsrc.N
+
+    iter = tqdm(zip(mrange[2:end], crange[2:end]))
+    for (i, (mean, c)) in enumerate(iter)
+        try
+            guess[1] = mean
+            prob = construct_twsol(guess, c, solsrc.L, N_gp=solsrc.N)
+            guess = prob.sol_hat
+            push!(sols, NovikovSolution(prob))
+            set_postfix(iter, Lines=i)
+        catch e
+            if e isa ConvergenceError
+                throw(
+                    ArgumentError(
+                        "Specified source solution cannot be extended; try one with a smaller amplitude or a lower c_end",
+                    ),
+                )
+            else
+                error(e)
+            end
+        end
+    end
+
+    writesols(outpath, sols, true)
+
+    log(
+        "Test completed; wrote " *
+            string(num_sols) *
+            " lines to " *
+            string(outpath),
+    )
+    return nothing
+end
+
+"""
+    amplim(sol; dc=1/4096, max_q=2000, maxmodes=1024)
+
+Find the range of wave speeds (and so amplitudes) of traveling waves by
+continuing a seed solution `sol` in steps of `dc` in both
 directions, for at most `max_q` steps. Continuation upward stops when more than
 `maxmodes` modes are needed, and downward when the solution becomes trivial or
 Newton's method fails. Solutions are written to `output/ampranges/<L>.txt`
 (`L` to 4 decimal places).
 """
-function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
+function amplim(seedsol; dc=1 / 4096, max_q=2000, maxmodes=1024)
     log("Starting amplitude rangefinding test------------------------- ")
 
-    outpath = @sprintf "output/ampranges/%.4f.txt" L
-
-    local seedsol
-    try
-        seedsol = getsol(inpath)
-    catch e
-        if e isa ArgumentError
-            seedsol = getsol(inpath, :L, L)
-        else
-            error(e)
-        end
-    end
+    outpath = @sprintf "output/ampranges/%.4f.txt" seedsol.L
 
     lines_written = 1
 
@@ -103,6 +138,7 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
 
     inc_lim = false
     dec_lim = false
+    local minmodes = 64
 
     iter = tqdm(2:max_q)
     for i in iter
@@ -111,11 +147,13 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
                 prob_inc = construct_twsol(
                     guess_inc,
                     c_inc,
-                    L,
+                    seedsol.L,
+                    N_fs=minmodes,
                     N_gp=seedsol.N,
                     maxmodes=maxmodes,
                 )
 
+                minmodes = prob_inc.N_modes
                 guess_inc = prob_inc.sol_hat
                 push!(sols, NovikovSolution(prob_inc))
                 c_inc += dc
@@ -139,7 +177,7 @@ function amplim(inpath, L; dc=1 / 4096, max_q=2000, maxmodes=1024)
                 prob_dec = construct_twsol(
                     guess_dec,
                     c_dec,
-                    L,
+                    seedsol.L,
                     N_gp=seedsol.N,
                     maxmodes=maxmodes,
                 )
