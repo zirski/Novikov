@@ -55,11 +55,11 @@ which factor is left out (and included in the derivative term): 1 for vertical
 """
     get_fhat(arr, i, mean)
 
-Return the Fourier coefficient of index `i`: `mean` for `i == 0`, `arr[i]` for
-`i > 0`, and `conj(arr[-i])` for `i < 0` (the solution is real).
+Return the Fourier coefficient of index `i`: `mean` for `i == 0`, otherwise
+`arr[abs(i)]`.
 """
 @inline function get_fhat(arr, i, mean)
-    i == 0 ? mean : i < 0 ? conj(arr[-i]) : arr[i]
+    i == 0 ? mean : i < 0 ? arr[-i] : arr[i]
 end
 
 """
@@ -385,7 +385,7 @@ Print the error message and the sum of the highest modes.
 """
 function Base.showerror(io::IO, err::InsufficientModeError)
     print(io, "InsufficientModeError: ")
-    print(io, err.msg * "\nsum of last 15 modes: " * string(err.hfm_sum))
+    print(io, err.msg * "\nsum of last 16 modes: " * string(err.hfm_sum))
 end
 
 """
@@ -458,12 +458,12 @@ function construct_twsol(
 
     # increment amount of modes used in NM if highest-frequency modes are higher-
     # valued than desired, as set by mtol
-    while real(sum(sol_hat[(N_fs_new-15):N_fs_new])) > mtol
+    while sum(abs, sol_hat[(N_fs_new-15):N_fs_new]) > mtol
         if N_fs_new * 2 > maxmodes
             throw(
                 InsufficientModeError(
                     "Not enough modes to resolve function.",
-                    real(sum(sol_hat[(N_fs_new-15):N_fs_new])),
+                    sum(abs, sol_hat[(N_fs_new-15):N_fs_new]),
                 ),
             )
         else

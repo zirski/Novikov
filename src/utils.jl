@@ -70,6 +70,10 @@ new vector.
     return du
 end
 
+@inline function deriv(sol, p)
+    return irfft(rfft(sol.sol) .* kvec(sol.L, sol.N) .^ p, sol.N)
+end
+
 """
     rk4!(f!, uhat, u, uhat_tmp, dus, t, q, ks, plan, iplan)
 
@@ -187,8 +191,8 @@ evolving it for one period of travel (time `L / c`) and returning the 2-norm of
 the difference between the initial and final states. A result near zero
 indicates a traveling wave.
 """
-function istw(sol::Vector{Float64}, c::Float64, L::Float64)
-    au_f = evolve(sol, L / c, round(1000 * L / c), kvec(L, length(sol)))
+function istw(sol::Vector{Float64}, c::Float64, L::Float64; q=1000)
+    au_f = evolve(sol, L / c, round(q * L / c), kvec(L, length(sol)))
     return norm(abs.(sol .- au_f))
 end
 
@@ -197,4 +201,6 @@ end
 
 Call `istw(sol.sol, sol.c, sol.L)`.
 """
-istw(sol::Union{NovikovProblem,NovikovSolution}) = istw(sol.sol, sol.c, sol.L)
+function istw(sol::T; kwargs...) where {T<:Union{NovikovProblem,NovikovSolution}}
+    return istw(sol.sol, sol.c, sol.L; kwargs...)
+end

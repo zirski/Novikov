@@ -220,9 +220,8 @@ end
 Return the stored eigenvalues of `sol`, found by its UUID among the files in
 the eigenvalue output directory.
 """
-function getevals(sol::NovikovSolution)
+function getevals(sol::NovikovSolution, dirpath)
     eval_files = Dict{UUID,String}()
-    dirpath = "/Users/tobyhammond/research/NovikovSolver/output/evals/"
 
     for filename in readdir(dirpath)
         eval_files[UUID(readline(joinpath(dirpath, filename)))] = filename
@@ -232,10 +231,13 @@ function getevals(sol::NovikovSolution)
         readline(file)
         # Julia prints non-finite imaginary parts as e.g. "NaN*im", which parse
         # can't read; "NaNim" parses fine
-        return [
-            parse(ComplexF64, replace(line, "*" => "")) for line in eachline(file)
-        ]
+        return [parse(ComplexF64, replace(line, "*" => "")) for line in eachline(file)]
     end
+end
+
+function getevals(sol::NovikovSolution)
+    dirpath = "/Users/tobyhammond/research/NovikovSolver/output/evals/"
+    return getevals(sol, dirpath)
 end
 
 """
