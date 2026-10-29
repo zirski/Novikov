@@ -66,3 +66,8 @@ function evolve(
     mul!(u_func, iplan, uhat_out)
     return u_func
 end
+
+function evolve(sol::NovikovSolution, t_f, q)
+    au_f = evolve(sol.sol, t_f, q, kvec(sol.L, sol.N))
+    return NovikovSolution(uuid4(), sol.c, sol.L, sol.H, au_f, sol.N)
+end
