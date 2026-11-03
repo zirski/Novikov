@@ -192,20 +192,11 @@ function construct_jacobian!(
     mean,
     lam,
 )
-    if Threads.nthreads() != 1
-        @threads :dynamic for n ∈ 1:N
-            for k ∈ 1:N
-                jac[k, n] = compute_elem(k, n, fhat, c, N, mean, lam)
-            end
-        end
-    else
-        for n ∈ 1:N
-            for k ∈ 1:N
-                jac[k, n] = compute_elem(k, n, fhat, c, N, mean, lam)
-            end
+    @threads :dynamic for n ∈ 1:N
+        for k ∈ 1:N
+            jac[k, n] = compute_elem(k, n, fhat, c, N, mean, lam)
         end
     end
-end
 
 """
     F!(output, fhat, c, N, mean, lam)
