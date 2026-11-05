@@ -33,51 +33,54 @@ operator.
 @inline t1(k, uhat, mean, c, L, mu) = c * (vcoef(k, mu, L) + vcoef(k, mu, L)^3)
 
 """
-    t2(k, j, l, uhat, mean, c, L, mu)
+    conv_sums(N, uhat, mean, L)
 
-Term `j` of the convolution sum contributing to element `(k, l)` of the
-linearized operator.
-"""
-@inline function t2(k, j, l, uhat, mean, c, L, mu)
-    return (*(
-        +(
-            4vcoef(l, mu, L) +
-                vcoef(l, mu, L)^3 +
-                8ucoef(j - l, L) +
-                2ucoef(k - j, L)^3,
-            3(
-                ucoef(k - j, L) * ucoef(j - l, L)^2 +
-                    ucoef(j - l, L)^2 * vcoef(l, mu, L) +
-                    ucoef(j - l, L) * vcoef(l, mu, L)^2
-            ),
-        ),
-        get_uhat(uhat, k - j, mean) * get_uhat(uhat, j - l, mean),
-    ))
-end
+Precompute the convolution sums of the T2 terms of the linearized operator.
 
+Every T2 sum over j is a convolution in a = k - j, b = j - l with a + b = k - l,
+so the sums depend only on p = k - l (see notes/latex/fast_assembly.tex).
+Return a `(4N + 1) × 5` array whose row `p + 2N + 1` holds S0, S1, S2, S3, S12
+at `p`.
 """
-    l_element(k, n, N, uhat, mean, c, L, mu)
-
-Compute element `(k, n)` of the linearized operator truncated to modes `-N:N`.
-"""
-function l_element(k, n, N, args...)
-    if k == n
-        return t1(k, args...) - sum(j -> t2(k, j, n, args...), (-N+k):(N+k))
-    else
-        return -sum(j -> t2(k, j, n, args...), (-N+max(k, n)):(N+min(k, n)))
+function conv_sums(N, uhat, mean, L)
+    S = zeros(ComplexF64, 4N + 1, 5)
+    @threads for p = (-2N):(2N)
+        # both Û indices stay in -N:N by construction
+        for a = max(-N, p - N):min(N, p + N)
+            b = p - a
+            w = get_uhat(uhat, a, mean) * get_uhat(uhat, b, mean)
+            qa, qb = ucoef(a, L), ucoef(b, L)
+            S[p+2N+1, 1] += w
+            S[p+2N+1, 2] += w * qb
+            S[p+2N+1, 3] += w * qb^2
+            S[p+2N+1, 4] += w * qb^3
+            S[p+2N+1, 5] += w * qa * qb^2
+        end
     end
+    return S
 end
 
 """
     fill_lmat!(lmat, N, uhat, mean, c, L, mu)
 
 Fill the `(2N + 1) × (2N + 1)` matrix `lmat` with the linearized operator over
-modes `-N:N` (multithreaded over columns).
+modes `-N:N`, built from the precomputed sums of [`conv_sums`](@ref)
+(multithreaded over columns).
 """
-function fill_lmat!(lmat, N, args...)
+function fill_lmat!(lmat, N, uhat, mean, c, L, mu)
+    S = conv_sums(N, uhat, mean, L)
     @threads for n = (-N):N
+        kn = vcoef(n, mu, L)
         for k = (-N):N
-            lmat[k+N+1, n+N+1] = l_element(k, n, N, args...)
+            p = k - n + 2N + 1
+            lmat[k+N+1, n+N+1] =
+                (k == n ? t1(n, uhat, mean, c, L, mu) : zero(ComplexF64)) - (
+                    (4kn + kn^3) * S[p, 1] +
+                    (8 + 3kn^2) * S[p, 2] +
+                    3kn * S[p, 3] +
+                    2S[p, 4] +
+                    3S[p, 5]
+                )
         end
     end
 end
