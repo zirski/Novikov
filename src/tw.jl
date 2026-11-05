@@ -89,9 +89,9 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
     if k == n
         term =
             alpha(c, n, lam) +
-            3 *
-            (beta(0, n, lam) + beta(2n, n, lam) + beta(0, -n, lam)) *
-            fhat[n]^2
+                3 *
+                (beta(0, n, lam) + beta(2n, n, lam) + beta(0, -n, lam)) *
+                fhat[n]^2
     else
         # 2 - combinations
         for combo ∈ combo_indices
@@ -102,7 +102,7 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
                 l = combo[2]
                 f = combo[3]
                 if j_bounds[1] <= j <= j_bounds[2] &&
-                   max(-N, -N + j) <= l <= min(N, N + j)
+                    max(-N, -N + j) <= l <= min(N, N + j)
                     term_tmp = 2 * beta(j, l, lam) * fhat[n]
                     if f == 1
                         term_tmp *= get_fhat(fhat, l, mean)
@@ -121,7 +121,7 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
         if k == 3n
             term += 3 * beta(2n, n, lam) * fhat[n]^2
         elseif j_bounds[1] <= 2n <= j_bounds[2] &&
-               max(-N, -N + 2n) <= n <= min(N, N + 2n)
+            max(-N, -N + 2n) <= n <= min(N, N + 2n)
             term += 2 * beta(2n, n, lam) * fhat[n] * get_fhat(fhat, k - 2n, mean)
         end
     end
@@ -134,33 +134,33 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
 
         # d1: l = j - n; d2: l = j + n
         if l_bounds[1] <= j - n <= l_bounds[2] &&
-           !check_combos((j, j - n), combo_indices)
+            !check_combos((j, j - n), combo_indices)
             term +=
                 beta(j, j - n, lam) *
-                get_fhat(fhat, k - j, mean) *
-                get_fhat(fhat, j - n, mean)
+                    get_fhat(fhat, k - j, mean) *
+                    get_fhat(fhat, j - n, mean)
         end
         if l_bounds[1] <= j + n <= l_bounds[2] &&
-           !check_combos((j, j + n), combo_indices)
+            !check_combos((j, j + n), combo_indices)
             term +=
                 beta(j, j + n, lam) *
-                get_fhat(fhat, k - j, mean) *
-                get_fhat(fhat, j + n, mean)
+                    get_fhat(fhat, k - j, mean) *
+                    get_fhat(fhat, j + n, mean)
         end
 
         # v1, v2; l = +- n
         if l_bounds[1] <= n <= l_bounds[2] && !check_combos((j, n), combo_indices)
             term +=
                 beta(j, n, lam) *
-                get_fhat(fhat, k - j, mean) *
-                get_fhat(fhat, j - n, mean)
+                    get_fhat(fhat, k - j, mean) *
+                    get_fhat(fhat, j - n, mean)
         end
         if l_bounds[1] <= -n <= l_bounds[2] &&
-           !check_combos((j, -n), combo_indices)
+            !check_combos((j, -n), combo_indices)
             term +=
                 beta(j, -n, lam) *
-                get_fhat(fhat, k - j, mean) *
-                get_fhat(fhat, j + n, mean)
+                    get_fhat(fhat, k - j, mean) *
+                    get_fhat(fhat, j + n, mean)
         end
 
         # h1, h2; k - j = n
@@ -169,8 +169,8 @@ function compute_elem(k, n, fhat, c, N, mean, lam)
                 if !check_combos((j, l), combo_indices)
                     term +=
                         beta(j, l, lam) *
-                        get_fhat(fhat, j - l, mean) *
-                        get_fhat(fhat, l, mean)
+                            get_fhat(fhat, j - l, mean) *
+                            get_fhat(fhat, l, mean)
                 end
             end
         end
@@ -217,12 +217,12 @@ function F!(output, fhat::Vector{ComplexF64}, c, N::Int64, mean, lam)
     @threads :dynamic for k = 1:N
         sum = zero(ComplexF64)
         for j = (-N+k):(N+k)
-            for l = max(-N, -N + j):min(N, N + j)
+            for l = max(-N, -N+j):min(N, N+j)
                 sum +=
                     beta(j, l, lam) *
-                    get_fhat(fhat, k - j, mean) *
-                    get_fhat(fhat, j - l, mean) *
-                    get_fhat(fhat, l, mean)
+                        get_fhat(fhat, k - j, mean) *
+                        get_fhat(fhat, j - l, mean) *
+                        get_fhat(fhat, l, mean)
             end
         end
         output[k] = alpha(c, k, lam) * fhat[k] + sum
